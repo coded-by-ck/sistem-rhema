@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retífica OS | Configurações</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand-inline" href="dashboard.html"><span>RO</span> Retífica OS</a>
+    <nav class="nav-menu">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="nova-os.html">Nova OS</a>
+      <a href="servicos.html">Serviços</a>
+      <a href="clientes.html">Clientes</a>
+      <a href="financeiro.html">Financeiro</a>
+      <a class="active" href="configuracoes.html">Configurações</a>
+    </nav>
+    <button class="btn btn-ghost logout-button" type="button">Sair</button>
+  </aside>
+
+  <main class="app-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Empresa</p>
+        <h1>Configurações da empresa</h1>
+      </div>
+    </header>
+
+    <form id="companySettingsForm" class="os-form">
+      <section class="form-section">
+        <div class="form-section-title"><span>01</span><h2>Identidade</h2></div>
+        <div class="form-grid">
+          <label>Nome da empresa<input name="nome" type="text" placeholder="Retífica OS"></label>
+          <label>CNPJ<input name="cnpj" type="text" placeholder="00.000.000/0000-00"></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-title"><span>02</span><h2>Contato</h2></div>
+        <div class="form-grid">
+          <label>Telefone/WhatsApp<input name="telefone" type="tel" placeholder="(00) 00000-0000"></label>
+          <label>E-mail<input name="email" type="email" placeholder="contato@empresa.com"></label>
+          <label>Endereço<input name="endereco" type="text"></label>
+          <label>Cidade/UF<input name="cidadeUf" type="text" placeholder="São Paulo/SP"></label>
+          <label class="full-width">Horário de atendimento<input name="horario" type="text" placeholder="Segunda a sexta, 8h às 18h"></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-title"><span>03</span><h2>Impressão</h2></div>
+        <div class="form-grid">
+          <label class="full-width">Observações padrão da OS<textarea name="observacoesPadrao" rows="3"></textarea></label>
+          <label class="full-width">Texto do rodapé da OS<textarea name="rodapeOs" rows="3"></textarea></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-title"><span>04</span><h2>Logo</h2></div>
+        <div class="settings-logo-row">
+          <div class="logo-preview" id="logoPreview"><span>RO</span></div>
+          <div class="form-actions">
+            <label class="btn btn-secondary file-button">Escolher logo<input id="logoInput" type="file" accept="image/*"></label>
+            <button class="btn btn-danger" type="button" id="removeLogo">Remover logo</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="form-actions sticky-actions">
+        <button class="btn btn-primary" type="submit">Salvar configurações</button>
+        <p class="report-feedback" id="settingsFeedback" aria-live="polite"></p>
+      </div>
+    </form>
+  </main>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/configuracoes.js"></script>
+</body>
+</html>

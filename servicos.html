@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retífica OS | Serviços</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand-inline" href="dashboard.html"><span>RO</span> Retífica OS</a>
+    <nav class="nav-menu">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="nova-os.html">Nova OS</a>
+      <a class="active" href="servicos.html">Serviços</a>
+      <a href="clientes.html">Clientes</a>
+      <a href="financeiro.html">Financeiro</a>
+      <a href="configuracoes.html">Configurações</a>
+    </nav>
+    <button class="btn btn-ghost logout-button" type="button">Sair</button>
+  </aside>
+
+  <main class="app-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Oficina</p>
+        <h1>Ordens de serviço</h1>
+      </div>
+      <a class="btn btn-primary" href="nova-os.html">Nova OS</a>
+    </header>
+
+    <section class="filter-bar services-toolbar">
+      <label class="wide-label search-label">Buscar OS, cliente, telefone, carro, peça ou serviço
+        <input id="serviceSearch" type="search" placeholder="Digite para localizar uma ordem">
+      </label>
+      <label>Status do serviço
+        <select id="statusFilter">
+          <option value="todos">Todos</option>
+          <option value="recebido">Recebido</option>
+          <option value="em análise">Em análise</option>
+          <option value="em execução">Em execução</option>
+          <option value="finalizado">Finalizado</option>
+          <option value="entregue">Entregue</option>
+        </select>
+      </label>
+      <label>Pagamento
+        <select id="paymentFilter">
+          <option value="todos">Todos</option>
+          <option value="pendente">Pendente</option>
+          <option value="parcial">Parcial</option>
+          <option value="pago">Pago</option>
+        </select>
+      </label>
+    </section>
+
+    <section id="ordersList" class="orders-grid"></section>
+  </main>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/os.js"></script>
+</body>
+</html>

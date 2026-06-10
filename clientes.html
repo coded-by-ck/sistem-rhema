@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retífica OS | Clientes</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand-inline" href="dashboard.html"><span>RO</span> Retífica OS</a>
+    <nav class="nav-menu">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="nova-os.html">Nova OS</a>
+      <a href="servicos.html">Serviços</a>
+      <a class="active" href="clientes.html">Clientes</a>
+      <a href="financeiro.html">Financeiro</a>
+      <a href="configuracoes.html">Configurações</a>
+    </nav>
+    <button class="btn btn-ghost logout-button" type="button">Sair</button>
+  </aside>
+
+  <main class="app-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Relacionamento</p>
+        <h1>Clientes e histórico</h1>
+      </div>
+    </header>
+
+    <section class="metrics-grid" id="clientMetrics"></section>
+
+    <section class="filter-bar">
+      <label class="wide-label">Buscar por nome, telefone, carro ou número da OS
+        <input id="clientSearch" type="search" placeholder="Digite para localizar um cliente">
+      </label>
+    </section>
+
+    <section class="clients-layout">
+      <div>
+        <div class="section-heading compact-heading">
+          <h2>Clientes</h2>
+        </div>
+        <section id="clientsList" class="clients-list"></section>
+      </div>
+
+      <aside class="client-history-panel">
+        <div class="section-heading compact-heading">
+          <h2>Histórico</h2>
+        </div>
+        <div id="clientHistory" class="empty-state">Selecione um cliente para ver o histórico completo.</div>
+      </aside>
+    </section>
+  </main>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/os.js"></script>
+</body>
+</html>

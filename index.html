@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retífica OS | Login</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-panel">
+      <div class="brand-block">
+        <span class="brand-mark">RO</span>
+        <div>
+          <h1>Retífica OS</h1>
+          <p>Controle de ordens para retífica de cabeçotes</p>
+        </div>
+      </div>
+
+      <form id="loginForm" class="form-stack">
+        <label>
+          Usuário
+          <input type="text" id="usuario" placeholder="admin" autocomplete="username" required>
+        </label>
+        <label>
+          Senha
+          <input type="password" id="senha" placeholder="qualquer senha" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn btn-primary">Entrar no sistema</button>
+        <p class="helper-text">Login demonstrativo. Informe qualquer usuário e senha.</p>
+      </form>
+    </section>
+  </main>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

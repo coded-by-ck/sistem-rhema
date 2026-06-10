@@ -1,0 +1,612 @@
+(function () {
+  const financeMetrics = document.getElementById('financeMetrics');
+  const pendingPayments = document.getElementById('pendingPayments');
+  const financeSearch = document.getElementById('financeSearch');
+  const financeStatusFilter = document.getElementById('financeStatusFilter');
+  const reportsSection = document.querySelector('.reports-section');
+  const reportFeedback = document.getElementById('reportFeedback');
+  const exportBackupButton = document.getElementById('exportBackup');
+  const importBackupButton = document.getElementById('importBackup');
+  const clearAllDataButton = document.getElementById('clearAllData');
+  const backupFileInput = document.getElementById('backupFile');
+  const backupFeedback = document.getElementById('backupFeedback');
+  const BACKUP_VERSION = '1.0';
+
+  function toNumber(value) {
+    const number = Number(value || 0);
+    return Number.isFinite(number) ?number : 0;
+  }
+
+  function getPhoneForWhatsApp(phone) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.startsWith('55') ?digits : `55${digits}`;
+  }
+
+  function createChargeLink(order) {
+    // WhatsApp financeiro: mensagem curta para cobrança de saldo pendente.
+    const phone = getPhoneForWhatsApp(order.telefone);
+    const companyName = getCompanySignature();
+    const message = [
+      `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
+      `Consta um valor pendente de ${formatCurrency(getOrderRemaining(order))} referente à OS ${order.numeroOs},`,
+      `do serviço ${order.tipoServico || 'não informado'} na peça/cabeçote ${order.peca || 'não informado'} do veículo ${order.carro || 'não informado'}.`,
+      'Podemos combinar a regularização?'
+    ].join(' ');
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  }
+
+  function excelFormulaText(value) {
+    const prepared = String(value == null ?'' : value).replace(/\r?\n/g, ' ').trim();
+    return '=\"' + prepared.replace(/\"/g, '\"\"') + '\"';
+  }
+
+  function textForExcel(value) {
+    return excelFormulaText(value || '');
+  }
+
+  function dateForExcel(value) {
+    return excelFormulaText(formatDate(value));
+  }
+
+  function currencyForExcel(value) {
+    return excelFormulaText(formatCurrency(value));
+  }
+
+  function generatedDateText() {
+    return new Date().toLocaleDateString('pt-BR');
+  }
+
+  function buildExcelTable(headers, rows, caption) {
+    const colgroup = headers.map(function () {
+      return '<col style="width: 170px;">';
+    }).join('');
+    const head = headers.map(function (header) {
+      return '<th>' + escapeHtml(header) + '</th>';
+    }).join('');
+    const body = rows.map(function (row) {
+      return '<tr>' + row.map(function (value) {
+        return '<td>' + escapeHtml(value) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+
+    return [
+      '<table>',
+      caption ?'<caption>' + escapeHtml(caption) + '</caption>' : '',
+      '<colgroup>' + colgroup + '</colgroup>',
+      '<thead><tr>' + head + '</tr></thead>',
+      '<tbody>' + body + '</tbody>',
+      '</table>'
+    ].join('');
+  }
+
+  function buildExcelHtml(title, tables) {
+    const generatedAt = generatedDateText();
+    const company = getCompanySettings();
+    // Aplicar configurações nos relatórios: cabeçalho administrativo com dados da empresa.
+    const companyLines = [company.nome, company.telefone, company.endereco, company.cidadeUf, company.cnpj ?`CNPJ: ${company.cnpj}` : ''].filter(Boolean);
+    const tablesHtml = tables.map(function (table) {
+      return buildExcelTable(table.headers, table.rows, table.caption);
+    }).join('');
+
+    return [
+      '<!DOCTYPE html>',
+      '<html>',
+      '<head>',
+      '<meta charset="UTF-8">',
+      '<style>',
+      'body { font-family: Arial, sans-serif; color: #111827; }',
+      'h1 { margin: 0 0 6px; font-size: 20px; }',
+      '.generated { margin: 0 0 18px; color: #374151; font-size: 12px; }',
+      'table { border-collapse: collapse; font-family: Arial, sans-serif; width: 100%; margin-bottom: 22px; }',
+      'caption { font-size: 15px; font-weight: bold; margin-bottom: 8px; text-align: left; }',
+      'th { background: #1f2933; color: #ffffff; font-weight: bold; }',
+      'td, th { border: 1px solid #999; padding: 8px; mso-number-format:"\\@"; vertical-align: top; }',
+      '</style>',
+      '</head>',
+      '<body>',
+      '<h1>' + escapeHtml(title) + '</h1>',
+      '<p class="generated">Data de geração: ' + escapeHtml(generatedAt) + '</p>',
+      tablesHtml,
+      '</body>',
+      '</html>'
+    ].join('');
+  }
+
+  function downloadExcel(filename, title, tables) {
+    const blob = new Blob(['\ufeff', buildExcelHtml(title, tables)], {
+      type: 'application/vnd.ms-excel;charset=utf-8;'
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function showReportSuccess() {
+    if (!reportFeedback) return;
+    reportFeedback.textContent = 'Relatório XLS exportado com sucesso.';
+    reportFeedback.classList.add('is-visible');
+    window.clearTimeout(showReportSuccess.timer);
+    showReportSuccess.timer = window.setTimeout(function () {
+      reportFeedback.classList.remove('is-visible');
+      reportFeedback.textContent = '';
+    }, 3200);
+  }
+
+  function showBackupMessage(message) {
+    if (!backupFeedback) return;
+    backupFeedback.textContent = message;
+    backupFeedback.classList.add('is-visible');
+    window.clearTimeout(showBackupMessage.timer);
+    showBackupMessage.timer = window.setTimeout(function () {
+      backupFeedback.classList.remove('is-visible');
+      backupFeedback.textContent = '';
+    }, 3600);
+  }
+
+  function assertHasRows(rows) {
+    if (rows.length) return true;
+    alert('Não há dados para exportar.');
+    return false;
+  }
+
+  function downloadJson(filename, data) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function getBackupFileName() {
+    return `retifica-os-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  }
+
+  function isValidBackup(data) {
+    return Boolean(data && data.sistema === 'Retífica OS' && Array.isArray(data.ordens));
+  }
+
+  function orderRow(order, includeNotes) {
+    const row = [
+      textForExcel(order.numeroOs),
+      order.cliente || '',
+      textForExcel(order.telefone),
+      order.carro || '',
+      order.ano || '',
+      order.motor || '',
+      order.peca || '',
+      order.tipoServico || '',
+      currencyForExcel(order.valorTotal),
+      currencyForExcel(order.valorEntrada),
+      currencyForExcel(getOrderRemaining(order)),
+      order.statusServico || '',
+      order.statusPagamento || '',
+      dateForExcel(order.dataEntrada),
+      dateForExcel(order.previsaoEntrega)
+    ];
+
+    if (includeNotes) {
+      row.push(order.observacoesPeca || '', order.observacoesGerais || '');
+    }
+
+    return row;
+  }
+
+  function clientKey(order) {
+    const phone = String(order.telefone || '').replace(/\D/g, '');
+    return phone || String(order.cliente || 'cliente-sem-telefone').trim().toLowerCase();
+  }
+
+  function getFinanceStats(orders) {
+    // Cálculo financeiro consolidado para os indicadores do caixa.
+    const totals = calculateTotals(orders);
+    const pagas = orders.filter(function (order) { return order.statusPagamento === 'pago'; }).length;
+    const parciais = orders.filter(function (order) { return order.statusPagamento === 'parcial'; }).length;
+    const pendentes = orders.filter(function (order) { return order.statusPagamento === 'pendente'; }).length;
+    const ticketMedio = orders.length ?totals.totalServicos / orders.length : 0;
+
+    return {
+      totalCadastrado: totals.totalServicos,
+      recebido: totals.recebido,
+      pendente: totals.pendente,
+      osPendentes: pendentes,
+      osPagas: pagas,
+      osParciais: parciais,
+      ticketMedio
+    };
+  }
+
+  function exportAllOrders() {
+    const orders = RetificaStorage.getOrders();
+    if (!assertHasRows(orders)) return;
+
+    const headers = [
+      'Número da OS',
+      'Cliente',
+      'Telefone',
+      'Carro',
+      'Ano',
+      'Motor',
+      'Peça/Cabeçote',
+      'Serviço',
+      'Valor Total',
+      'Entrada',
+      'Restante',
+      'Status do Serviço',
+      'Status do Pagamento',
+      'Data de Entrada',
+      'Previsão',
+      'Observações da Peça',
+      'Observações Gerais'
+    ];
+    const rows = orders.map(function (order) {
+      return orderRow(order, true);
+    });
+
+    downloadExcel('retifica-os-todas-os.xls', 'Relatório - Todas as OS', [{ caption: 'Todas as OS', headers, rows }]);
+    showReportSuccess();
+  }
+
+  function exportPendingOrders() {
+    const orders = RetificaStorage.getOrders().filter(function (order) {
+      return order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || getOrderRemaining(order) > 0;
+    });
+    if (!assertHasRows(orders)) return;
+
+    const headers = [
+      'Número da OS',
+      'Cliente',
+      'Telefone',
+      'Carro',
+      'Serviço',
+      'Valor Total',
+      'Entrada',
+      'Restante',
+      'Status do Serviço',
+      'Status do Pagamento',
+      'Data de Entrada',
+      'Previsão'
+    ];
+    const rows = orders.map(function (order) {
+      return [
+        textForExcel(order.numeroOs),
+        order.cliente || '',
+        textForExcel(order.telefone),
+        order.carro || '',
+        order.tipoServico || '',
+        currencyForExcel(order.valorTotal),
+        currencyForExcel(order.valorEntrada),
+        currencyForExcel(getOrderRemaining(order)),
+        order.statusServico || '',
+        order.statusPagamento || '',
+        dateForExcel(order.dataEntrada),
+        dateForExcel(order.previsaoEntrega)
+      ];
+    });
+
+    downloadExcel('retifica-os-pendencias.xls', 'Relatório - Pendências', [{ caption: 'Pendências', headers, rows }]);
+    showReportSuccess();
+  }
+
+  function exportFinanceSummary() {
+    const orders = RetificaStorage.getOrders();
+    if (!assertHasRows(orders)) return;
+
+    const stats = getFinanceStats(orders);
+    const summaryHeaders = ['Indicador', 'Valor'];
+    const summaryRows = [
+      ['Faturamento Total Cadastrado', currencyForExcel(stats.totalCadastrado)],
+      ['Valor Recebido', currencyForExcel(stats.recebido)],
+      ['Valor Pendente', currencyForExcel(stats.pendente)],
+      ['OS Pagas', stats.osPagas],
+      ['OS Pendentes', stats.osPendentes],
+      ['OS Parciais', stats.osParciais],
+      ['Ticket Médio por OS', currencyForExcel(stats.ticketMedio)],
+      ['Data de Geração', textForExcel(generatedDateText())]
+    ];
+
+    const orderHeaders = [
+      'Número da OS',
+      'Cliente',
+      'Serviço',
+      'Valor Total',
+      'Entrada',
+      'Restante',
+      'Status do Pagamento'
+    ];
+    const orderRows = orders.map(function (order) {
+      return [
+        textForExcel(order.numeroOs),
+        order.cliente || '',
+        order.tipoServico || '',
+        currencyForExcel(order.valorTotal),
+        currencyForExcel(order.valorEntrada),
+        currencyForExcel(getOrderRemaining(order)),
+        order.statusPagamento || ''
+      ];
+    });
+
+    downloadExcel('retifica-os-financeiro.xls', 'Relatório - Financeiro', [
+      { caption: 'Resumo financeiro', headers: summaryHeaders, rows: summaryRows },
+      { caption: 'OS e valores', headers: orderHeaders, rows: orderRows }
+    ]);
+    showReportSuccess();
+  }
+
+  function buildClientsReport(orders) {
+    const grouped = orders.reduce(function (acc, order) {
+      const key = clientKey(order);
+      if (!acc[key]) {
+        acc[key] = {
+          cliente: order.cliente || 'Cliente não informado',
+          telefone: order.telefone || 'Não informado',
+          nomes: [],
+          ordens: []
+        };
+      }
+
+      const orderName = String(order.cliente || '').trim();
+      if (orderName && !acc[key].nomes.some(function (name) {
+        return name.toLowerCase() === orderName.toLowerCase();
+      })) {
+        acc[key].nomes.push(orderName);
+      }
+
+      acc[key].ordens.push(order);
+      return acc;
+    }, {});
+
+    return Object.values(grouped).map(function (client) {
+      client.ordens.sort(function (a, b) {
+        return String(b.dataEntrada || '').localeCompare(String(a.dataEntrada || ''));
+      });
+      const totalGasto = client.ordens.reduce(function (sum, order) {
+        return sum + toNumber(order.valorTotal);
+      }, 0);
+      const valorPendente = client.ordens.reduce(function (sum, order) {
+        return sum + getOrderRemaining(order);
+      }, 0);
+      const ultimaOs = client.ordens[0] || {};
+
+      return [
+        ultimaOs.cliente || client.cliente,
+        textForExcel(client.telefone),
+        client.nomes.join(', '),
+        client.ordens.length,
+        currencyForExcel(totalGasto),
+        currencyForExcel(valorPendente),
+        textForExcel(ultimaOs.numeroOs),
+        ultimaOs.carro || '',
+        valorPendente > 0 ?'Cliente com pendência' : 'Cliente em dia'
+      ];
+    });
+  }
+
+  function exportClientsReport() {
+    const orders = RetificaStorage.getOrders();
+    if (!assertHasRows(orders)) return;
+
+    const headers = [
+      'Nome principal',
+      'Telefone',
+      'Nomes cadastrados',
+      'Quantidade de OS',
+      'Total gasto',
+      'Valor pendente',
+      'Última OS',
+      'Último veículo',
+      'Status geral'
+    ];
+    const rows = buildClientsReport(orders);
+
+    downloadExcel('retifica-os-clientes.xls', 'Relatório - Clientes', [{ caption: 'Clientes agrupados por telefone', headers, rows }]);
+    showReportSuccess();
+  }
+
+  function exportBackup() {
+    // Exportação do backup: empacota todas as OS atuais em JSON para guardar fora do localStorage.
+    const orders = RetificaStorage.getOrders();
+    const backup = {
+      sistema: 'Retífica OS',
+      versao: BACKUP_VERSION,
+      geradoEm: new Date().toISOString(),
+      totalRegistros: orders.length,
+      ordens: orders,
+      configuracoesEmpresa: getCompanySettings()
+    };
+
+    downloadJson(getBackupFileName(), backup);
+    showBackupMessage('Backup exportado com sucesso.');
+  }
+
+  function restoreBackup(file) {
+    // Importação do backup: valida o JSON antes de sobrescrever as OS salvas no localStorage.
+    if (!file) return;
+    const reader = new FileReader();
+
+    reader.onload = function () {
+      try {
+        const data = JSON.parse(String(reader.result || ''));
+        if (!isValidBackup(data)) {
+          alert('Arquivo inválido ou incompatível.');
+          return;
+        }
+
+        if (!confirm('Restaurar este backup vai sobrescrever os dados atuais. Deseja continuar?')) return;
+
+        RetificaStorage.updateOrders(data.ordens);
+        if (data.configuracoesEmpresa) RetificaStorage.saveCompanySettings(data.configuracoesEmpresa);
+        renderFinance();
+        applyCompanyBrand();
+        showBackupMessage('Backup restaurado com sucesso.');
+      } catch (error) {
+        alert('Arquivo inválido ou incompatível.');
+      } finally {
+        if (backupFileInput) backupFileInput.value = '';
+      }
+    };
+
+    reader.onerror = function () {
+      alert('Arquivo inválido ou incompatível.');
+      if (backupFileInput) backupFileInput.value = '';
+    };
+
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  function clearAllData() {
+    // Limpeza total dos dados: remove todas as OS, incluindo reais e demonstração.
+    const confirmed = confirm('Tem certeza que deseja apagar todos os dados? Essa ação não pode ser desfeita.');
+    if (!confirmed) return;
+
+    RetificaStorage.updateOrders([]);
+    renderFinance();
+    showBackupMessage('Todos os dados foram apagados.');
+  }
+
+  function renderMetrics(orders) {
+    const stats = getFinanceStats(orders);
+    const cards = [
+      ['Faturamento total cadastrado', `<span class="money-value">${formatCurrency(stats.totalCadastrado)}</span>`, ''],
+      ['Valor recebido', `<span class="money-value">${formatCurrency(stats.recebido)}</span>`, 'success'],
+      ['Valor pendente', `<span class="money-value">${formatCurrency(stats.pendente)}</span>`, stats.pendente > 0 ?'alert' : 'success'],
+      ['OS pendentes', stats.osPendentes, stats.osPendentes > 0 ?'alert' : ''],
+      ['OS pagas', stats.osPagas, 'success'],
+      ['OS parciais', stats.osParciais, stats.osParciais > 0 ?'warning' : ''],
+      ['Ticket médio por OS', `<span class="money-value">${formatCurrency(stats.ticketMedio)}</span>`, '']
+    ];
+
+    financeMetrics.innerHTML = cards.map(function (card) {
+      return `<article class="metric-card ${card[2]}"><span>${card[0]}</span><strong>${card[1]}</strong></article>`;
+    }).join('');
+  }
+
+  function getFilteredOrders() {
+    const search = financeSearch ?financeSearch.value.trim().toLowerCase() : '';
+    const status = financeStatusFilter ?financeStatusFilter.value : 'todos';
+
+    return RetificaStorage.getOrders().filter(function (order) {
+      const remaining = getOrderRemaining(order);
+      const hasPendingPayment = order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || remaining > 0;
+      const searchableText = [
+        order.cliente,
+        order.telefone,
+        order.numeroOs,
+        order.carro
+      ].join(' ').toLowerCase();
+      const searchMatch = !search || searchableText.includes(search);
+      const statusMatch = status === 'todos' || order.statusPagamento === status;
+      return hasPendingPayment && searchMatch && statusMatch;
+    });
+  }
+
+  function renderPaymentList() {
+    const filteredOrders = getFilteredOrders();
+    const visibleOrders = filteredOrders;
+
+    pendingPayments.innerHTML = visibleOrders.length ?visibleOrders.map(function (order) {
+      const remaining = getOrderRemaining(order);
+      const pendingClass = remaining > 0 ?'has-pending' : '';
+
+      return `
+        <article class="finance-order ${pendingClass}">
+          <div class="finance-order-head">
+            <div>
+              <span class="os-number">${escapeHtml(order.numeroOs)}</span>
+              <h3>${escapeHtml(order.cliente || 'Cliente não informado')}</h3>
+              <p>${escapeHtml(order.telefone || 'Telefone não informado')}</p>
+            </div>
+            <div class="status-row">
+              <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
+              <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
+            </div>
+          </div>
+
+          <div class="order-info-grid">
+            <span><strong>Carro</strong>${escapeHtml(order.carro || 'Não informado')}</span>
+            <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
+            <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
+            <span><strong>Previsão</strong>${formatDate(order.previsaoEntrega)}</span>
+          </div>
+
+          <div class="order-values">
+            <span><strong>Valor total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
+            <span><strong>Entrada</strong><span class="money-value">${formatCurrency(order.valorEntrada)}</span></span>
+            <span class="${remaining > 0 ?'value-pending' : 'value-paid'}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
+          </div>
+
+          <div class="card-actions">
+            <a class="btn btn-whatsapp" href="${createChargeLink(order)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>
+            <button class="btn btn-secondary" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>
+            <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
+          </div>
+        </article>
+      `;
+    }).join('') : '<div class="empty-state">Nenhum pagamento pendente no momento.</div>';
+  }
+
+  function renderFinance() {
+    const orders = RetificaStorage.getOrders();
+    renderMetrics(orders);
+    renderPaymentList();
+  }
+
+  function markOrderPaid(order) {
+    RetificaStorage.updateOrder(order.id, {
+      ...order,
+      statusPagamento: 'pago',
+      valorEntrada: toNumber(order.valorTotal),
+      valorRestante: 0
+    });
+    renderFinance();
+  }
+
+  if (pendingPayments) {
+    pendingPayments.addEventListener('click', function (event) {
+      const button = event.target.closest('button[data-action="paid"]');
+      if (!button) return;
+      const order = RetificaStorage.getOrderById(button.dataset.id);
+      if (!order) return;
+      markOrderPaid(order);
+    });
+  }
+
+  if (reportsSection) {
+    reportsSection.addEventListener('click', function (event) {
+      const button = event.target.closest('[data-report]');
+      if (!button) return;
+      if (button.dataset.report === 'all') exportAllOrders();
+      if (button.dataset.report === 'pending') exportPendingOrders();
+      if (button.dataset.report === 'finance') exportFinanceSummary();
+      if (button.dataset.report === 'clients') exportClientsReport();
+    });
+  }
+
+  if (exportBackupButton) exportBackupButton.addEventListener('click', exportBackup);
+  if (importBackupButton && backupFileInput) {
+    importBackupButton.addEventListener('click', function () {
+      backupFileInput.click();
+    });
+  }
+  if (backupFileInput) {
+    backupFileInput.addEventListener('change', function () {
+      restoreBackup(backupFileInput.files && backupFileInput.files[0]);
+    });
+  }
+  if (clearAllDataButton) clearAllDataButton.addEventListener('click', clearAllData);
+
+  if (financeSearch) financeSearch.addEventListener('input', renderFinance);
+  if (financeStatusFilter) financeStatusFilter.addEventListener('change', renderFinance);
+
+  renderFinance();
+})();

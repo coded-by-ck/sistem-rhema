@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retífica OS | Financeiro</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand-inline" href="dashboard.html"><span>RO</span> Retífica OS</a>
+    <nav class="nav-menu">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="nova-os.html">Nova OS</a>
+      <a href="servicos.html">Serviços</a>
+      <a href="clientes.html">Clientes</a>
+      <a class="active" href="financeiro.html">Financeiro</a>
+      <a href="configuracoes.html">Configurações</a>
+    </nav>
+    <button class="btn btn-ghost logout-button" type="button">Sair</button>
+  </aside>
+
+  <main class="app-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Caixa</p>
+        <h1>Controle financeiro</h1>
+      </div>
+    </header>
+
+    <section class="metrics-grid" id="financeMetrics"></section>
+
+    <section class="content-section reports-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Administração</p>
+          <h2>Relatórios</h2>
+          <p>Exporte dados para conferência, cobrança ou fechamento financeiro.</p>
+        </div>
+      </div>
+      <div class="reports-grid">
+        <button class="btn btn-secondary" type="button" data-report="all">Exportar todas as OS (.xls)</button>
+        <button class="btn btn-secondary" type="button" data-report="pending">Exportar pendências (.xls)</button>
+        <button class="btn btn-secondary" type="button" data-report="finance">Exportar financeiro (.xls)</button>
+        <button class="btn btn-secondary" type="button" data-report="clients">Exportar clientes (.xls)</button>
+      </div>
+      <p class="report-feedback" id="reportFeedback" aria-live="polite"></p>
+    </section>
+
+    <section class="content-section backup-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Segurança</p>
+          <h2>Backup dos dados</h2>
+          <p>Exporte uma cópia dos dados do sistema ou restaure um backup salvo anteriormente.</p>
+        </div>
+      </div>
+      <div class="backup-actions">
+        <button class="btn btn-secondary" type="button" id="exportBackup">Exportar backup</button>
+        <button class="btn btn-secondary" type="button" id="importBackup">Importar backup</button>
+        <button class="btn btn-danger" type="button" id="clearAllData">Limpar todos os dados</button>
+      </div>
+      <input id="backupFile" class="sr-only" type="file" accept=".json,application/json">
+      <p class="report-feedback" id="backupFeedback" aria-live="polite"></p>
+    </section>
+
+    <section class="filter-bar services-toolbar">
+      <label class="wide-label search-label">Buscar cliente, telefone, OS ou carro
+        <input id="financeSearch" type="search" placeholder="Digite para filtrar pagamentos">
+      </label>
+      <label>Status do pagamento
+        <select id="financeStatusFilter">
+          <option value="todos">Todos</option>
+          <option value="pendente">Pendente</option>
+          <option value="parcial">Parcial</option>
+          <option value="pago">Pago</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="content-section finance-section">
+      <div class="section-heading">
+        <h2>Pendências de pagamento</h2>
+      </div>
+      <div id="pendingPayments" class="finance-list"></div>
+    </section>
+  </main>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/financeiro.js"></script>
+</body>
+</html>
