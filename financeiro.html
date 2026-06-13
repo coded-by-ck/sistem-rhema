@@ -16,6 +16,7 @@
       <a href="clientes.html">Clientes</a>
       <a class="active" href="financeiro.html">Financeiro</a>
       <a href="configuracoes.html">Configurações</a>
+      <a href="ajuda.html">Ajuda</a>
     </nav>
     <button class="btn btn-ghost logout-button" type="button">Sair</button>
   </aside>
@@ -35,14 +36,20 @@
         <div>
           <p class="eyebrow">Administração</p>
           <h2>Relatórios</h2>
-          <p>Exporte dados para conferência, cobrança ou fechamento financeiro.</p>
+          <p>Exporte planilhas ou gere impressões compactas para conferência, cobrança ou fechamento financeiro.</p>
         </div>
       </div>
+      <h3 class="reports-subtitle">Relatórios em planilha</h3>
       <div class="reports-grid">
         <button class="btn btn-secondary" type="button" data-report="all">Exportar todas as OS (.xls)</button>
         <button class="btn btn-secondary" type="button" data-report="pending">Exportar pendências (.xls)</button>
         <button class="btn btn-secondary" type="button" data-report="finance">Exportar financeiro (.xls)</button>
         <button class="btn btn-secondary" type="button" data-report="clients">Exportar clientes (.xls)</button>
+      </div>
+      <h3 class="reports-subtitle">Impressão</h3>
+      <div class="reports-grid reports-print-grid">
+        <button class="btn btn-secondary" type="button" data-print-report="finance">Imprimir resumo financeiro</button>
+        <button class="btn btn-secondary" type="button" data-print-report="orders">Imprimir lista resumida de OS</button>
       </div>
       <p class="report-feedback" id="reportFeedback" aria-live="polite"></p>
     </section>

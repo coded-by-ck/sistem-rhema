@@ -29,7 +29,7 @@
     const companyName = getCompanySignature();
     const message = [
       `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
-      `Consta um valor pendente de ${formatCurrency(getOrderRemaining(order))} referente à OS ${order.numeroOs},`,
+      `Consta um valor pendente de ${formatCurrency(getOrderRemaining(order))} referente à OS nº ${order.numeroOs},`,
       `do serviço ${order.tipoServico || 'não informado'} na peça/cabeçote ${order.peca || 'não informado'} do veículo ${order.carro || 'não informado'}.`,
       'Podemos combinar a regularização?'
     ].join(' ');
@@ -37,21 +37,21 @@
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   }
 
-  function excelFormulaText(value) {
+  function normalizeReportText(value) {
     const prepared = String(value == null ?'' : value).replace(/\r?\n/g, ' ').trim();
-    return '=\"' + prepared.replace(/\"/g, '\"\"') + '\"';
+    return prepared;
   }
 
   function textForExcel(value) {
-    return excelFormulaText(value || '');
+    return normalizeReportText(value || '');
   }
 
   function dateForExcel(value) {
-    return excelFormulaText(formatDate(value));
+    return normalizeReportText(formatDate(value));
   }
 
   function currencyForExcel(value) {
-    return excelFormulaText(formatCurrency(value));
+    return normalizeReportText(formatCurrency(value));
   }
 
   function generatedDateText() {
@@ -67,7 +67,7 @@
     }).join('');
     const body = rows.map(function (row) {
       return '<tr>' + row.map(function (value) {
-        return '<td>' + escapeHtml(value) + '</td>';
+        return '<td style="mso-number-format:\'\\@\';">' + escapeHtml(value) + '</td>';
       }).join('') + '</tr>';
     }).join('');
 
@@ -130,13 +130,157 @@
 
   function showReportSuccess() {
     if (!reportFeedback) return;
-    reportFeedback.textContent = 'Relatório XLS exportado com sucesso.';
+    reportFeedback.textContent = 'Relatório exportado com sucesso.';
     reportFeedback.classList.add('is-visible');
     window.clearTimeout(showReportSuccess.timer);
     showReportSuccess.timer = window.setTimeout(function () {
       reportFeedback.classList.remove('is-visible');
       reportFeedback.textContent = '';
     }, 3200);
+  }
+
+  function getCompanyReportLines(company) {
+    return [company.nome, company.telefone, company.endereco, company.cidadeUf, company.cnpj ?`CNPJ: ${company.cnpj}` : ''].filter(Boolean);
+  }
+
+  function pendingFinancialOrders(orders) {
+    return orders.filter(function (order) {
+      return order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || getOrderRemaining(order) > 0;
+    });
+  }
+
+  function paymentLabel(status) {
+    if (status === 'pago') return 'Pago';
+    if (status === 'parcial') return 'Parcial';
+    return 'Pendente';
+  }
+
+  function printStyles(pageSize) {
+    return [
+      'body { background: #fff; color: #000; font-family: Arial, sans-serif; margin: 0; }',
+      '.print-area { padding: 0; width: 100%; max-width: 100%; }',
+      '.print-header { border-bottom: 2px solid #222; margin-bottom: 14px; padding-bottom: 10px; }',
+      '.print-header h1 { font-size: 22px; margin: 0 0 5px; }',
+      '.print-header p { font-size: 11px; margin: 2px 0; }',
+      '.meta { color: #333; font-size: 11px; margin: 0 0 12px; }',
+      '.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 12px 0 14px; }',
+      '.summary-item { border: 1px solid #999; padding: 7px; }',
+      '.summary-item span { display: block; color: #444; font-size: 9px; font-weight: bold; text-transform: uppercase; }',
+      '.summary-item strong { display: block; font-size: 13px; margin-top: 3px; }',
+      'h2 { font-size: 15px; margin: 12px 0 7px; }',
+      'table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }',
+      'th, td { border: 1px solid #999; padding: 5px; word-break: normal; overflow-wrap: normal; vertical-align: top; }',
+      'th { background: #eee; color: #000; font-weight: bold; }',
+      '.money { white-space: nowrap; }',
+      '.empty { border: 1px solid #999; color: #333; padding: 10px; }',
+      `@page { size: ${pageSize}; margin: 10mm; }`,
+      '@media print { body { background: #fff !important; color: #000 !important; font-family: Arial, sans-serif; } .no-print, nav, header, .navbar, button { display: none !important; } .print-area { width: 100%; max-width: 100%; } }'
+    ].join('');
+  }
+
+  function openPrintWindow(title, bodyHtml, pageSize) {
+    safePrint([
+      '<main class="print-area">',
+      bodyHtml,
+      '</main>'
+    ].join(''), {
+      title,
+      styles: printStyles(pageSize),
+      width: 1100,
+      height: 800
+    });
+  }
+
+  function buildPrintHeader(title) {
+    const company = getCompanySettings();
+    const companyLines = getCompanyReportLines(company).map(function (line) {
+      return '<p>' + escapeHtml(line) + '</p>';
+    }).join('');
+
+    return [
+      '<section class="print-header">',
+      '<h1>' + escapeHtml(title) + '</h1>',
+      companyLines,
+      '<p>Data de geração: ' + escapeHtml(generatedDateText()) + '</p>',
+      '</section>'
+    ].join('');
+  }
+
+  function buildPrintTable(headers, rows, widths) {
+    if (!rows.length) return '<div class="empty">Nenhum registro para imprimir.</div>';
+    const colgroup = widths ?'<colgroup>' + widths.map(function (width) {
+      return '<col style="width:' + escapeHtml(width) + '">';
+    }).join('') + '</colgroup>' : '';
+    const head = headers.map(function (header) {
+      return '<th>' + escapeHtml(header) + '</th>';
+    }).join('');
+    const body = rows.map(function (row) {
+      return '<tr>' + row.map(function (value) {
+        return '<td>' + escapeHtml(value) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+
+    return '<table>' + colgroup + '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
+  }
+
+  function imprimirResumoFinanceiro() {
+    const orders = RetificaStorage.getOrders();
+    if (!assertHasRows(orders)) return;
+
+    const stats = getFinanceStats(orders);
+    const pendingRows = pendingFinancialOrders(orders).map(function (order) {
+      return [
+        order.numeroOs || '',
+        order.cliente || '',
+        order.tipoServico || '',
+        formatCurrency(order.valorTotal),
+        formatCurrency(order.valorEntrada),
+        formatCurrency(getOrderRemaining(order)),
+        paymentLabel(order.statusPagamento)
+      ];
+    });
+    const summaryItems = [
+      ['Faturamento total cadastrado', formatCurrency(stats.totalCadastrado)],
+      ['Valor recebido', formatCurrency(stats.recebido)],
+      ['Valor pendente', formatCurrency(stats.pendente)],
+      ['OS pagas', stats.osPagas],
+      ['OS pendentes', stats.osPendentes],
+      ['OS parciais', stats.osParciais],
+      ['Ticket médio', formatCurrency(stats.ticketMedio)]
+    ].map(function (item) {
+      return '<div class="summary-item"><span>' + escapeHtml(item[0]) + '</span><strong>' + escapeHtml(item[1]) + '</strong></div>';
+    }).join('');
+
+    openPrintWindow('Relatório Financeiro', [
+      buildPrintHeader('Relatório Financeiro'),
+      '<section class="summary-grid">' + summaryItems + '</section>',
+      '<h2>Pendências financeiras</h2>',
+      buildPrintTable(['OS', 'Cliente', 'Serviço', 'Total', 'Entrada', 'Restante', 'Pagamento'], pendingRows, ['11%', '22%', '23%', '11%', '11%', '11%', '11%'])
+    ].join(''), 'A4');
+  }
+
+  function imprimirListaOS() {
+    const orders = RetificaStorage.getOrders();
+    if (!assertHasRows(orders)) return;
+
+    const rows = orders.map(function (order) {
+      return [
+        order.numeroOs || '',
+        order.cliente || '',
+        order.telefone || '',
+        order.carro || '',
+        order.tipoServico || '',
+        formatCurrency(order.valorTotal),
+        formatCurrency(getOrderRemaining(order)),
+        order.statusServico || '',
+        paymentLabel(order.statusPagamento)
+      ];
+    });
+
+    openPrintWindow('Lista resumida de OS', [
+      buildPrintHeader('Lista resumida de OS'),
+      buildPrintTable(['OS', 'Cliente', 'Telefone', 'Carro', 'Serviço', 'Total', 'Restante', 'Status do Serviço', 'Status do Pagamento'], rows, ['10%', '16%', '13%', '12%', '16%', '8%', '8%', '9%', '8%'])
+    ].join(''), 'A4 landscape');
   }
 
   function showBackupMessage(message) {
@@ -187,16 +331,22 @@
       order.peca || '',
       order.tipoServico || '',
       currencyForExcel(order.valorTotal),
+      currencyForExcel(order.valorOrcado),
       currencyForExcel(order.valorEntrada),
       currencyForExcel(getOrderRemaining(order)),
       order.statusServico || '',
       order.statusPagamento || '',
       dateForExcel(order.dataEntrada),
-      dateForExcel(order.previsaoEntrega)
+      dateForExcel(order.previsaoEntrega),
+      dateForExcel(order.dataOrcamento),
+      order.aprovadoCliente || 'não',
+      dateForExcel(order.dataAprovacao),
+      dateForExcel(order.dataRetirada),
+      order.retiradoPor || ''
     ];
 
     if (includeNotes) {
-      row.push(order.observacoesPeca || '', order.observacoesGerais || '');
+      row.push(order.observacoesPeca || '', order.observacaoOrcamento || '', order.observacaoRetirada || '', order.observacoesGerais || '');
     }
 
     return row;
@@ -210,10 +360,19 @@
   function getFinanceStats(orders) {
     // Cálculo financeiro consolidado para os indicadores do caixa.
     const totals = calculateTotals(orders);
-    const pagas = orders.filter(function (order) { return order.statusPagamento === 'pago'; }).length;
-    const parciais = orders.filter(function (order) { return order.statusPagamento === 'parcial'; }).length;
-    const pendentes = orders.filter(function (order) { return order.statusPagamento === 'pendente'; }).length;
-    const ticketMedio = orders.length ?totals.totalServicos / orders.length : 0;
+    const activeOrders = orders.filter(function (order) {
+      return order.statusServico !== 'recusado'
+        || toNumber(order.valorTotal) > 0
+        || toNumber(order.valorEntrada) > 0
+        || getOrderRemaining(order) > 0;
+    });
+    const pagas = activeOrders.filter(function (order) { return order.statusPagamento === 'pago'; }).length;
+    const parciais = activeOrders.filter(function (order) { return order.statusPagamento === 'parcial'; }).length;
+    const pendentes = activeOrders.filter(function (order) { return order.statusPagamento === 'pendente'; }).length;
+    const activeTotal = activeOrders.reduce(function (sum, order) {
+      return sum + toNumber(order.valorTotal);
+    }, 0);
+    const ticketMedio = activeOrders.length ?activeTotal / activeOrders.length : 0;
 
     return {
       totalCadastrado: totals.totalServicos,
@@ -240,13 +399,21 @@
       'Peça/Cabeçote',
       'Serviço',
       'Valor Total',
+      'Valor Orçado',
       'Entrada',
       'Restante',
       'Status do Serviço',
       'Status do Pagamento',
       'Data de Entrada',
       'Previsão',
+      'Data do Orçamento',
+      'Aprovado pelo Cliente',
+      'Data de Aprovação',
+      'Data de Retirada',
+      'Retirado Por',
       'Observações da Peça',
+      'Observação do Orçamento',
+      'Observação de Retirada',
       'Observações Gerais'
     ];
     const rows = orders.map(function (order) {
@@ -255,6 +422,13 @@
 
     downloadExcel('retifica-os-todas-os.xls', 'Relatório - Todas as OS', [{ caption: 'Todas as OS', headers, rows }]);
     showReportSuccess();
+  }
+
+  function exportarXLS(reportType) {
+    if (reportType === 'all') exportAllOrders();
+    if (reportType === 'pending') exportPendingOrders();
+    if (reportType === 'finance') exportFinanceSummary();
+    if (reportType === 'clients') exportClientsReport();
   }
 
   function exportPendingOrders() {
@@ -499,9 +673,9 @@
       const remaining = getOrderRemaining(order);
       const hasPendingPayment = order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || remaining > 0;
       const searchableText = [
+        getOrderSearchText(order),
         order.cliente,
         order.telefone,
-        order.numeroOs,
         order.carro
       ].join(' ').toLowerCase();
       const searchMatch = !search || searchableText.includes(search);
@@ -511,19 +685,26 @@
   }
 
   function renderPaymentList() {
+    const allOrders = RetificaStorage.getOrders();
     const filteredOrders = getFilteredOrders();
     const visibleOrders = filteredOrders;
+
+    if (!allOrders.length) {
+      pendingPayments.innerHTML = '<div class="empty-state">Nenhuma movimentação financeira encontrada.</div>';
+      return;
+    }
 
     pendingPayments.innerHTML = visibleOrders.length ?visibleOrders.map(function (order) {
       const remaining = getOrderRemaining(order);
       const pendingClass = remaining > 0 ?'has-pending' : '';
+      const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
 
       return `
         <article class="finance-order ${pendingClass}">
           <div class="finance-order-head">
             <div>
               <span class="os-number">${escapeHtml(order.numeroOs)}</span>
-              <h3>${escapeHtml(order.cliente || 'Cliente não informado')}</h3>
+              <h3>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge}</h3>
               <p>${escapeHtml(order.telefone || 'Telefone não informado')}</p>
             </div>
             <div class="status-row">
@@ -552,7 +733,7 @@
           </div>
         </article>
       `;
-    }).join('') : '<div class="empty-state">Nenhum pagamento pendente no momento.</div>';
+    }).join('') : '<div class="empty-state">Nenhuma movimentação financeira encontrada.</div>';
   }
 
   function renderFinance() {
@@ -569,6 +750,7 @@
       valorRestante: 0
     });
     renderFinance();
+    showAppMessage('Pagamento marcado como pago.');
   }
 
   if (pendingPayments) {
@@ -584,13 +766,16 @@
   if (reportsSection) {
     reportsSection.addEventListener('click', function (event) {
       const button = event.target.closest('[data-report]');
-      if (!button) return;
-      if (button.dataset.report === 'all') exportAllOrders();
-      if (button.dataset.report === 'pending') exportPendingOrders();
-      if (button.dataset.report === 'finance') exportFinanceSummary();
-      if (button.dataset.report === 'clients') exportClientsReport();
+      const printButton = event.target.closest('[data-print-report]');
+      if (button) exportarXLS(button.dataset.report);
+      if (printButton && printButton.dataset.printReport === 'finance') imprimirResumoFinanceiro();
+      if (printButton && printButton.dataset.printReport === 'orders') imprimirListaOS();
     });
   }
+
+  window.exportarXLS = exportarXLS;
+  window.imprimirResumoFinanceiro = imprimirResumoFinanceiro;
+  window.imprimirListaOS = imprimirListaOS;
 
   if (exportBackupButton) exportBackupButton.addEventListener('click', exportBackup);
   if (importBackupButton && backupFileInput) {

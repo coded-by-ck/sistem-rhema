@@ -29,9 +29,23 @@
     const companyName = getCompanySignature();
     const message = [
       `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
-      `Sua OS ${order.numeroOs} referente ao cabeçote/peça ${order.peca || 'não informada'} do veículo ${order.carro || 'não informado'} está com status: ${order.statusServico}.`,
+      `Sua OS nº ${order.numeroOs} referente ao cabeçote/peça ${order.peca || 'não informada'} do veículo ${order.carro || 'não informado'} está com status: ${order.statusServico}.`,
       `Valor total: ${formatCurrency(order.valorTotal)}.`,
       `Valor pendente: ${formatCurrency(getOrderRemaining(order))}.`
+    ].join(' ');
+
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  }
+
+  function createBudgetWhatsAppLink(order) {
+    const phone = getPhoneForWhatsApp(order.telefone);
+    const companyName = getCompanySignature();
+    const budgetValue = toNumber(order.valorOrcado) || toNumber(order.valorTotal);
+    const message = [
+      `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
+      `Já avaliamos sua peça/cabeçote referente à OS nº ${order.numeroOs}.`,
+      `O orçamento ficou em ${formatCurrency(budgetValue)}.`,
+      'Podemos seguir com a execução do serviço?'
     ].join(' ');
 
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -43,6 +57,15 @@
     const valorTotal = toNumber(data.get('valorTotal'));
     const valorEntrada = Math.min(toNumber(data.get('valorEntrada')), valorTotal);
     const statusPagamento = data.get('statusPagamento');
+    const statusServico = data.get('statusServico');
+    const approvedByStatus = statusServico === 'aprovado' || statusServico === 'em execução' || statusServico === 'finalizado' || statusServico === 'entregue';
+    const aprovadoCliente = approvedByStatus ?'sim' : (data.get('aprovadoCliente') || 'não');
+    const dataAprovacao = aprovadoCliente === 'sim'
+      ?(data.get('dataAprovacao') || RetificaStorage.getTodayIso())
+      : (data.get('dataAprovacao') || '');
+    const dataRetirada = statusServico === 'entregue'
+      ?(data.get('dataRetirada') || RetificaStorage.getTodayIso())
+      : (data.get('dataRetirada') || '');
 
     // Em edição, número e data original são preservados mesmo se o HTML for alterado no navegador.
     return {
@@ -59,9 +82,17 @@
       valorTotal,
       valorEntrada,
       valorRestante: statusPagamento === 'pago' ?0 : Math.max(valorTotal - valorEntrada, 0),
-      statusServico: data.get('statusServico'),
+      statusServico,
       statusPagamento,
       previsaoEntrega: data.get('previsaoEntrega') || '',
+      valorOrcado: toNumber(data.get('valorOrcado')),
+      dataOrcamento: data.get('dataOrcamento') || '',
+      aprovadoCliente,
+      dataAprovacao,
+      observacaoOrcamento: String(data.get('observacaoOrcamento') || '').trim(),
+      dataRetirada,
+      retiradoPor: String(data.get('retiradoPor') || '').trim(),
+      observacaoRetirada: String(data.get('observacaoRetirada') || '').trim(),
       observacoesPeca: String(data.get('observacoesPeca') || '').trim(),
       observacoesGerais: String(data.get('observacoesGerais') || '').trim(),
       criadoEm: existingOrder ?existingOrder.criadoEm : new Date().toISOString()
@@ -92,6 +123,14 @@
     form.statusServico.value = order.statusServico || 'recebido';
     form.statusPagamento.value = order.statusPagamento || 'pendente';
     form.previsaoEntrega.value = order.previsaoEntrega || '';
+    form.valorOrcado.value = toNumber(order.valorOrcado) || '';
+    form.dataOrcamento.value = order.dataOrcamento || '';
+    form.aprovadoCliente.value = order.aprovadoCliente || 'não';
+    form.dataAprovacao.value = order.dataAprovacao || '';
+    form.observacaoOrcamento.value = order.observacaoOrcamento || '';
+    form.dataRetirada.value = order.dataRetirada || '';
+    form.retiradoPor.value = order.retiradoPor || '';
+    form.observacaoRetirada.value = order.observacaoRetirada || '';
     form.observacoesPeca.value = order.observacoesPeca || '';
     form.observacoesGerais.value = order.observacoesGerais || '';
     updateRemainingPreview();
@@ -123,26 +162,33 @@
       form.valorEntrada.addEventListener(eventName, updateRemainingPreview);
       form.statusPagamento.addEventListener(eventName, updateRemainingPreview);
     });
+    form.statusServico.addEventListener('change', function () {
+      if (form.statusServico.value === 'entregue' && !form.dataRetirada.value) {
+        form.dataRetirada.value = RetificaStorage.getTodayIso();
+      }
+      if (['aprovado', 'em execução', 'finalizado', 'entregue'].includes(form.statusServico.value)) {
+        form.aprovadoCliente.value = 'sim';
+        if (!form.dataAprovacao.value) form.dataAprovacao.value = RetificaStorage.getTodayIso();
+      }
+    });
 
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       const order = collectOrderFromForm(existingOrder);
 
-      if (existingOrder) RetificaStorage.updateOrder(existingOrder.id, order);
-      else RetificaStorage.saveOrder(order);
+      if (existingOrder) {
+        RetificaStorage.updateOrder(existingOrder.id, order);
+        setFlashMessage('OS atualizada com sucesso.');
+      } else {
+        RetificaStorage.saveOrder(order);
+        setFlashMessage('OS salva com sucesso.');
+      }
 
       window.location.href = 'servicos.html';
     });
   }
 
-  function printOrder(order) {
-    // Impressão: gera uma janela isolada com layout claro para assinatura e arquivo físico.
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) {
-      alert('Permita pop-ups para imprimir a OS.');
-      return;
-    }
-
+  function imprimirOS(order) {
     // Aplicar configurações na impressão: usa logo, contato e textos padrão da empresa.
     const company = getCompanySettings();
     const companyLogo = company.logo
@@ -152,42 +198,74 @@
       .filter(Boolean)
       .map(function (item) { return `<p>${escapeHtml(item)}</p>`; })
       .join('');
-    const defaultNotes = company.observacoesPadrao
-      ?`<h2>Observações padrão da empresa</h2><div class="notes">${escapeHtml(company.observacoesPadrao)}</div>`
+    const optionalItem = function (label, value) {
+      return value ?`<div class="item"><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</div>` : '';
+    };
+    const optionalDateItem = function (label, value) {
+      return value ?optionalItem(label, formatDate(value)) : '';
+    };
+    const optionalMoneyItem = function (label, value) {
+      return toNumber(value) > 0 ?`<div class="item"><strong>${escapeHtml(label)}</strong>${formatCurrency(value)}</div>` : '';
+    };
+    const optionalNotes = function (title, value, className) {
+      return value ?`<section class="${className || 'compact-section'}"><h2>${escapeHtml(title)}</h2><div class="notes">${escapeHtml(value)}</div></section>` : '';
+    };
+    const budgetItems = [
+      optionalMoneyItem('Valor orçado', order.valorOrcado),
+      optionalDateItem('Data do orçamento', order.dataOrcamento),
+      ['orçamento', 'aguardando aprovação', 'aprovado', 'recusado'].includes(order.statusServico) || order.dataAprovacao || order.observacaoOrcamento
+        ?optionalItem('Aprovado pelo cliente', order.aprovadoCliente || 'não')
+        : '',
+      optionalDateItem('Data de aprovação', order.dataAprovacao)
+    ].join('');
+    const withdrawalItems = [
+      optionalDateItem('Data de retirada', order.dataRetirada),
+      optionalItem('Retirado por', order.retiradoPor)
+    ].join('');
+    const budgetSection = budgetItems || order.observacaoOrcamento
+      ?`<section class="compact-section"><h2>Orçamento e aprovação</h2>${budgetItems ?`<div class="grid">${budgetItems}</div>` : ''}${order.observacaoOrcamento ?`<div class="notes">${escapeHtml(order.observacaoOrcamento)}</div>` : ''}</section>`
       : '';
-    const footerText = company.rodapeOs ?`<footer>${escapeHtml(company.rodapeOs)}</footer>` : '';
+    const withdrawalSection = withdrawalItems || order.observacaoRetirada
+      ?`<section class="compact-section"><h2>Retirada</h2>${withdrawalItems ?`<div class="grid">${withdrawalItems}</div>` : ''}${order.observacaoRetirada ?`<div class="notes">${escapeHtml(order.observacaoRetirada)}</div>` : ''}</section>`
+      : '';
+    const defaultNotes = company.observacoesPadrao
+      ?`<section class="observacoes-padrao"><h2>Observações padrão da empresa</h2><div class="notes observacoes-padrao-box">${escapeHtml(company.observacoesPadrao)}</div></section>`
+      : '';
+    const footerText = company.rodapeOs ?`<footer class="print-footer">${escapeHtml(company.rodapeOs)}</footer>` : '';
+    const styles = [
+      'html, body { height: auto; min-height: 0; }',
+      'body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 12px; line-height: 1.3; margin: 0; }',
+      '.print-area, .print-page { width: 100%; max-width: 190mm; margin: 0 auto; padding: 0; page-break-after: avoid; break-after: avoid; }',
+      'header { align-items: center; border-bottom: 1px solid #111827; display: flex; gap: 12px; margin-bottom: 8px; padding-bottom: 7px; break-inside: avoid; page-break-inside: avoid; }',
+      'header p { margin: 2px 0; }',
+      'p { margin: 2px 0; }',
+      '.print-logo, .print-logo-fallback { width: 50px; height: 50px; border: 1px solid #d1d5db; object-fit: contain; }',
+      '.print-logo-fallback { display: grid; place-items: center; font-weight: 800; }',
+      'h1 { font-size: 20px; margin: 0 0 6px; }',
+      'h2, h3 { border-bottom: 1px solid #d1d5db; font-size: 14px; margin: 8px 0 5px; padding-bottom: 2px; }',
+      '.compact-section { break-inside: avoid; page-break-inside: avoid; }',
+      '.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }',
+      '.item { font-size: 12px; min-height: 0; }',
+      '.item strong { display: block; color: #4b5563; font-size: 9px; line-height: 1.15; text-transform: uppercase; }',
+      '.notes { border: 1px solid #d1d5db; min-height: auto; padding: 6px; white-space: pre-wrap; font-size: 11px; line-height: 1.25; }',
+      '.observacoes-padrao, .signatures, .print-signatures, .footer, .print-footer { break-inside: avoid; page-break-inside: avoid; }',
+      '.observacoes-padrao h2 { margin-top: 6px; }',
+      '.observacoes-padrao-box { min-height: auto; max-height: 48px; overflow: hidden; padding: 6px; margin-top: 4px; }',
+      '.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; }',
+      '.signature { border-top: 1px solid #111827; padding-top: 4px; text-align: center; font-size: 11px; }',
+      'footer { border-top: 1px solid #d1d5db; color: #4b5563; max-height: 34px; overflow: hidden; margin-top: 6px; padding-top: 4px; white-space: pre-wrap; font-size: 9px; line-height: 1.18; }',
+      '@page { size: A4 portrait; margin: 7mm; }',
+      '@media print { body { background: #fff !important; color: #000 !important; font-family: Arial, sans-serif; } .print-area, .print-page { width: 100%; max-width: 190mm; } }'
+    ].join('');
 
     const html = `
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head>
-        <meta charset="UTF-8">
-        <title>${escapeHtml(order.numeroOs)} - Retífica OS</title>
-        <style>
-          body { color: #111827; font-family: Arial, Helvetica, sans-serif; margin: 32px; }
-          header { align-items: center; border-bottom: 2px solid #111827; display: flex; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; }
-          header p { margin: 2px 0; }
-          .print-logo, .print-logo-fallback { width: 76px; height: 76px; border: 1px solid #d1d5db; object-fit: contain; }
-          .print-logo-fallback { display: grid; place-items: center; font-weight: 800; }
-          h1 { margin: 0; font-size: 28px; }
-          h2 { border-bottom: 1px solid #d1d5db; font-size: 16px; margin: 22px 0 10px; padding-bottom: 6px; }
-          .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 24px; }
-          .item { font-size: 14px; }
-          .item strong { display: block; color: #4b5563; font-size: 11px; text-transform: uppercase; }
-          .notes { border: 1px solid #d1d5db; min-height: 70px; padding: 10px; white-space: pre-wrap; }
-          .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 64px; }
-          .signature { border-top: 1px solid #111827; padding-top: 8px; text-align: center; }
-          footer { border-top: 1px solid #d1d5db; color: #4b5563; margin-top: 34px; padding-top: 10px; white-space: pre-wrap; }
-          @media print { body { margin: 18mm; } button { display: none; } }
-        </style>
-      </head>
-      <body>
+      <main class="print-area print-page">
         <header>
           ${companyLogo}
           <div>
             <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
             ${companyInfo}
-            <p><strong>Ordem de Serviço:</strong> ${escapeHtml(order.numeroOs)}</p>
+            <p><strong>Ordem de Serviço nº</strong> ${escapeHtml(order.numeroOs)}</p>
           </div>
         </header>
 
@@ -221,25 +299,26 @@
           <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'Não informado')}</div>
         </section>
 
-        <h2>Observações da peça</h2>
-        <div class="notes">${escapeHtml(order.observacoesPeca || 'Sem observações.')}</div>
+        ${budgetSection}
+        ${withdrawalSection}
+        ${optionalNotes('Observações da peça', order.observacoesPeca)}
+        ${optionalNotes('Observações gerais', order.observacoesGerais)}
 
-        <h2>Observações gerais</h2>
-        <div class="notes">${escapeHtml(order.observacoesGerais || 'Sem observações.')}</div>
-
+        ${defaultNotes}
+        ${footerText}
         <section class="signatures">
-          <div class="signature">Recebido por</div>
           <div class="signature">Assinatura do cliente</div>
           <div class="signature">Assinatura da empresa</div>
         </section>
-        ${footerText}
-        <script>window.onload = function () { window.print(); };</script>
-      </body>
-      </html>
+      </main>
     `;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+    safePrint(html, {
+      title: `${order.numeroOs} - Retífica OS`,
+      styles,
+      width: 900,
+      height: 700
+    });
   }
 
   function markOrderPaid(order) {
@@ -251,18 +330,52 @@
     });
   }
 
+  function approveOrder(order) {
+    RetificaStorage.updateOrder(order.id, {
+      ...order,
+      statusServico: 'aprovado',
+      aprovadoCliente: 'sim',
+      dataAprovacao: order.dataAprovacao || RetificaStorage.getTodayIso()
+    });
+  }
+
+  function rejectOrder(order) {
+    RetificaStorage.updateOrder(order.id, {
+      ...order,
+      statusServico: 'recusado',
+      aprovadoCliente: 'não'
+    });
+  }
+
+  function canSendBudget(order) {
+    return toNumber(order.valorOrcado) > 0 || ['orçamento', 'aguardando aprovação'].includes(order.statusServico);
+  }
+
+  function canApproveOrReject(order) {
+    return ['orçamento', 'aguardando aprovação'].includes(order.statusServico);
+  }
+
   function renderOrderCard(order) {
     const late = isOrderLate(order);
     const remaining = getOrderRemaining(order);
     const lateBadge = late ?'<span class="badge danger">Atrasada</span>' : '';
+    const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
     const paymentSummaryClass = remaining > 0 ?'value-pending' : 'value-paid';
+    const waitingApproval = order.statusServico === 'aguardando aprovação';
+    const sendBudgetAction = canSendBudget(order)
+      ?`<a class="btn btn-mini btn-mini-whatsapp" href="${createBudgetWhatsAppLink(order)}" target="_blank" rel="noopener">Enviar orçamento</a>`
+      : '';
+    const approvalActions = canApproveOrReject(order)
+      ?`<button class="btn btn-mini btn-mini-success" type="button" data-action="approve" data-id="${escapeHtml(order.id)}">Aprovado</button>
+        <button class="btn btn-mini btn-mini-danger" type="button" data-action="reject" data-id="${escapeHtml(order.id)}">Recusado</button>`
+      : '';
 
     return `
-      <article class="order-card ${late ?'is-late' : ''}" data-id="${escapeHtml(order.id)}">
+      <article class="order-card ${late ?'is-late' : ''} ${waitingApproval ?'waiting-approval' : ''}" data-id="${escapeHtml(order.id)}">
         <div class="order-card-head">
           <div>
             <span class="os-number">${escapeHtml(order.numeroOs)}</span>
-            <h3>${escapeHtml(order.cliente || 'Cliente não informado')}</h3>
+            <h3>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge}</h3>
           </div>
           ${lateBadge}
         </div>
@@ -271,6 +384,8 @@
           <span><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')} ${escapeHtml(order.ano)}</span>
           <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
           <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+          <span><strong>Valor orçado</strong><span class="money-value">${formatCurrency(order.valorOrcado)}</span></span>
+          <span><strong>Aprovação</strong>${escapeHtml(order.aprovadoCliente || 'não')} ${order.dataAprovacao ?`em ${formatDate(order.dataAprovacao)}` : ''}</span>
           <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
           <span><strong>Previsão</strong>${formatDate(order.previsaoEntrega)}</span>
         </div>
@@ -284,6 +399,8 @@
           <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
         </div>
         <div class="quick-actions">
+          ${sendBudgetAction}
+          ${approvalActions}
           <button class="btn btn-mini" type="button" data-action="status" data-status="em execução" data-id="${escapeHtml(order.id)}">Em execução</button>
           <button class="btn btn-mini" type="button" data-action="status" data-status="finalizado" data-id="${escapeHtml(order.id)}">Finalizado</button>
           <button class="btn btn-mini" type="button" data-action="status" data-status="entregue" data-id="${escapeHtml(order.id)}">Entregue</button>
@@ -304,8 +421,9 @@
     const search = serviceSearch ?serviceSearch.value.trim().toLowerCase() : '';
     const selectedStatus = statusFilter.value;
     const selectedPayment = paymentFilter.value;
-    const orders = RetificaStorage.getOrders().filter(function (order) {
-      const searchableText = [order.numeroOs, order.cliente, order.telefone, order.carro, order.peca, order.tipoServico].join(' ').toLowerCase();
+    const allOrders = RetificaStorage.getOrders();
+    const orders = allOrders.filter(function (order) {
+      const searchableText = [getOrderSearchText(order), order.cliente, order.telefone, order.carro, order.peca, order.tipoServico].join(' ').toLowerCase();
       const searchMatch = !search || searchableText.includes(search);
       const statusMatch = selectedStatus === 'todos' || order.statusServico === selectedStatus;
       const paymentMatch = selectedPayment === 'todos' || order.statusPagamento === selectedPayment;
@@ -314,13 +432,20 @@
 
     list.innerHTML = orders.length
       ?orders.map(renderOrderCard).join('')
-      : '<div class="empty-state">Nenhuma ordem encontrada para a busca e filtros selecionados.</div>';
+      : '<div class="empty-state">Nenhuma ordem de serviço encontrada.</div>';
   }
 
   function updateOrderStatus(order, status) {
     // Atualização de status: ação rápida nos cards sem alterar dados financeiros.
-    RetificaStorage.updateOrder(order.id, { ...order, statusServico: status });
+    const updates = { ...order, statusServico: status };
+    if (status === 'entregue' && !order.dataRetirada) updates.dataRetirada = RetificaStorage.getTodayIso();
+    if (['em execução', 'finalizado', 'entregue'].includes(status)) {
+      updates.aprovadoCliente = 'sim';
+      updates.dataAprovacao = order.dataAprovacao || RetificaStorage.getTodayIso();
+    }
+    RetificaStorage.updateOrder(order.id, updates);
     renderOrders();
+    showAppMessage('Status atualizado.');
   }
 
   if (list) {
@@ -331,17 +456,28 @@
       if (!order) return;
 
       if (button.dataset.action === 'delete') {
-        if (confirm(`Tem certeza que deseja excluir ${order.numeroOs}?Esta ação não pode ser desfeita.`)) {
+        if (confirm(`Tem certeza que deseja excluir a OS nº ${order.numeroOs}? Esta ação não pode ser desfeita.`)) {
           RetificaStorage.deleteOrder(order.id);
           renderOrders();
         }
       }
 
-      if (button.dataset.action === 'print') printOrder(order);
+      if (button.dataset.action === 'print') imprimirOS(order);
       if (button.dataset.action === 'status') updateOrderStatus(order, button.dataset.status);
+      if (button.dataset.action === 'approve') {
+        approveOrder(order);
+        renderOrders();
+        showAppMessage('OS marcada como aprovada.');
+      }
+      if (button.dataset.action === 'reject') {
+        rejectOrder(order);
+        renderOrders();
+        showAppMessage('OS marcada como recusada.');
+      }
       if (button.dataset.action === 'paid') {
         markOrderPaid(order);
         renderOrders();
+        showAppMessage('Pagamento marcado como pago.');
       }
     });
   }
@@ -403,7 +539,7 @@
   function clientMatchesSearch(client, search) {
     if (!search) return true;
     const historyText = client.ordens.map(function (order) {
-      return [order.numeroOs, order.carro, order.telefone, order.cliente].join(' ');
+      return [getOrderSearchText(order), order.carro, order.telefone, order.cliente].join(' ');
     }).join(' ');
     return `${client.cliente} ${client.telefone} ${client.nomes.join(' ')} ${historyText}`.toLowerCase().includes(search);
   }
@@ -435,7 +571,7 @@
   function renderClientHistory(client) {
     if (!clientHistory) return;
     if (!client) {
-      clientHistory.innerHTML = 'Selecione um cliente para ver o histórico completo.';
+      clientHistory.innerHTML = 'Selecione um cliente para visualizar o histórico.';
       clientHistory.className = 'empty-state';
       return;
     }
@@ -447,13 +583,47 @@
 
     const ordersHtml = client.ordens.map(function (order) {
       const remaining = getOrderRemaining(order);
+      const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
+      const sendBudgetAction = canSendBudget(order)
+        ?`<a class="btn btn-whatsapp" href="${createBudgetWhatsAppLink(order)}" target="_blank" rel="noopener">Enviar orçamento</a>`
+        : '';
+      const approvalActions = canApproveOrReject(order)
+        ?`<button class="btn btn-secondary" type="button" data-action="approve" data-id="${escapeHtml(order.id)}">Marcar como aprovado</button>
+          <button class="btn btn-danger" type="button" data-action="reject" data-id="${escapeHtml(order.id)}">Marcar como recusado</button>`
+        : '';
       const paidButton = remaining > 0 || order.statusPagamento !== 'pago'
         ?`<button class="btn btn-mini btn-mini-success" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>`
+        : '';
+      const hasBudgetContext = toNumber(order.valorOrcado) > 0
+        || order.dataOrcamento
+        || order.dataAprovacao
+        || order.observacaoOrcamento
+        || ['orçamento', 'aguardando aprovação', 'aprovado', 'recusado'].includes(order.statusServico);
+      const budgetGridItems = [
+        toNumber(order.valorOrcado) > 0 ?`<span><strong>Valor orçado</strong><span class="money-value">${formatCurrency(order.valorOrcado)}</span></span>` : '',
+        order.dataOrcamento ?`<span><strong>Data do orçamento</strong>${formatDate(order.dataOrcamento)}</span>` : '',
+        hasBudgetContext ?`<span><strong>Aprovação</strong>${escapeHtml(order.aprovadoCliente || 'não')}</span>` : '',
+        order.dataAprovacao ?`<span><strong>Data de aprovação</strong>${formatDate(order.dataAprovacao)}</span>` : '',
+        order.dataRetirada ?`<span><strong>Data de retirada</strong>${formatDate(order.dataRetirada)}</span>` : '',
+        order.retiradoPor ?`<span><strong>Retirado por</strong>${escapeHtml(order.retiradoPor)}</span>` : ''
+      ].join('');
+      const budgetNotes = order.observacaoOrcamento
+        ?`<div class="history-notes">
+          <strong>Observação do orçamento</strong>
+          <p>${escapeHtml(order.observacaoOrcamento)}</p>
+        </div>`
+        : '';
+      const withdrawalNotes = order.observacaoRetirada
+        ?`<div class="history-notes">
+          <strong>Observação de retirada</strong>
+          <p>${escapeHtml(order.observacaoRetirada)}</p>
+        </div>`
         : '';
       return `
         <article class="history-order ${remaining > 0 ?'has-pending' : ''}">
           <div class="history-order-head">
             <span class="os-number">${escapeHtml(order.numeroOs)}</span>
+            ${demoBadge}
             <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
             <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
           </div>
@@ -465,6 +635,7 @@
             <span><strong>Motor</strong>${escapeHtml(order.motor || 'Não informado')}</span>
             <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
             <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+            ${budgetGridItems}
             <span><strong>Valor total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
             <span><strong>Entrada</strong><span class="money-value">${formatCurrency(order.valorEntrada)}</span></span>
             <span class="${remaining > 0 ?'value-pending' : 'value-paid'}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
@@ -481,11 +652,15 @@
               <strong>Observações gerais</strong>
               <p>${escapeHtml(order.observacoesGerais || 'Sem observações.')}</p>
             </div>
+            ${budgetNotes}
+            ${withdrawalNotes}
           </div>
           <div class="card-actions">
             <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
             <button class="btn btn-secondary" type="button" data-action="print" data-id="${escapeHtml(order.id)}">Imprimir OS</button>
             <a class="btn btn-whatsapp" href="${createWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp</a>
+            ${sendBudgetAction}
+            ${approvalActions}
             ${paidButton}
           </div>
         </article>
@@ -522,9 +697,9 @@
       return;
     }
 
-    if (!selectedClientKey || !clients.some(function (client) { return client.key === selectedClientKey; })) {
-      selectedClientKey = clients[0].key;
-    }
+    const selectedClient = selectedClientKey
+      ?clients.find(function (client) { return client.key === selectedClientKey; })
+      : null;
 
     clientsList.innerHTML = clients.map(function (client) {
       const pendingClass = client.valorPendente > 0 ?'has-pending' : '';
@@ -557,7 +732,7 @@
       `;
     }).join('');
 
-    renderClientHistory(clients.find(function (client) { return client.key === selectedClientKey; }));
+    renderClientHistory(selectedClient);
   }
 
   if (clientsList) {
@@ -575,10 +750,21 @@
       if (!button) return;
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
-      if (button.dataset.action === 'print') printOrder(order);
+      if (button.dataset.action === 'print') imprimirOS(order);
+      if (button.dataset.action === 'approve') {
+        approveOrder(order);
+        renderClients();
+        showAppMessage('OS marcada como aprovada.');
+      }
+      if (button.dataset.action === 'reject') {
+        rejectOrder(order);
+        renderClients();
+        showAppMessage('OS marcada como recusada.');
+      }
       if (button.dataset.action === 'paid') {
         markOrderPaid(order);
         renderClients();
+        showAppMessage('Pagamento marcado como pago.');
       }
     });
   }
@@ -597,4 +783,6 @@
     });
     renderClients();
   }
+
+  window.imprimirOS = imprimirOS;
 })();

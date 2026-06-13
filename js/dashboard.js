@@ -20,15 +20,16 @@
 
     const cards = [
       ['Total de ordens', totals.totalOrdens, ''],
-      ['Ordens recebidas', totals.recebidas, ''],
+      ['Aguardando aprovação', totals.aguardandoAprovacao, totals.aguardandoAprovacao > 0 ?'alert' : ''],
+      ['Aprovados', totals.aprovadas, 'success'],
+      ['Recusados', totals.recusadas, totals.recusadas > 0 ?'danger' : ''],
       ['Em execução', totals.emExecucao, 'warning'],
       ['Finalizadas', totals.finalizadas, 'success'],
       ['Entregues', totals.entregues, 'success'],
-      ['OS atrasadas', lateOrders, lateOrders > 0 ?'alert' : 'success'],
-      ['Clientes com pendência', clientsWithPending, clientsWithPending > 0 ?'alert' : 'success'],
+      ['Pendências financeiras', clientsWithPending, clientsWithPending > 0 ?'alert' : 'success'],
       ['Total a receber', `<span class="money-value">${formatCurrency(totals.pendente)}</span>`, totals.pendente > 0 ?'alert' : 'success'],
       ['Faturamento recebido', `<span class="money-value">${formatCurrency(totals.recebido)}</span>`, 'success'],
-      ['Total em serviços', `<span class="money-value">${formatCurrency(totals.totalServicos)}</span>`, '']
+      ['OS atrasadas', lateOrders, lateOrders > 0 ?'alert' : 'success']
     ];
 
     metrics.innerHTML = cards.map(function (card) {
@@ -41,10 +42,11 @@
     const lateOrders = orders.filter(isOrderLate);
     const clientsWithPending = Object.values(getClientsWithPending(orders));
     const inProgress = orders.filter(function (order) {
-      return order.statusServico !== 'finalizado' && order.statusServico !== 'entregue';
+      return isWorkInProgress(order);
     });
 
     const items = [
+      ['Aguardando aprovação', totals.aguardandoAprovacao, orders.filter(function (order) { return order.statusServico === 'aguardando aprovação'; }).slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') || 'Nenhum orçamento pendente'],
       ['OS atrasadas', lateOrders.length, lateOrders.length ?lateOrders.slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') : 'Nenhuma OS fora do prazo'],
       ['Clientes com pendência', clientsWithPending.length, clientsWithPending.length ?clientsWithPending.slice(0, 3).map(function (order) { return order.cliente || 'Cliente sem nome'; }).join(', ') : 'Nenhum cliente pendente'],
       ['Serviços em andamento', inProgress.length, inProgress.length ?inProgress.slice(0, 3).map(function (order) { return order.peca || order.tipoServico || order.numeroOs; }).join(', ') : 'Fila operacional zerada'],
@@ -77,7 +79,7 @@
           <td><span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento || 'pendente')}</span></td>
         </tr>
       `;
-    }).join('') || '<tr><td colspan="6">Nenhuma ordem cadastrada ainda.</td></tr>';
+    }).join('') || '<tr><td colspan="6">Nenhuma OS cadastrada ainda.</td></tr>';
   }
 
   function renderDashboard() {

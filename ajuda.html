@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retífica OS | Ajuda</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand-inline" href="dashboard.html"><span>RO</span> Retífica OS</a>
+    <nav class="nav-menu">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="nova-os.html">Nova OS</a>
+      <a href="servicos.html">Serviços</a>
+      <a href="clientes.html">Clientes</a>
+      <a href="financeiro.html">Financeiro</a>
+      <a href="configuracoes.html">Configurações</a>
+      <a class="active" href="ajuda.html">Ajuda</a>
+    </nav>
+    <button class="btn btn-ghost logout-button" type="button">Sair</button>
+  </aside>
+
+  <main class="app-main">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Guia rápido</p>
+        <h1>Como usar o sistema</h1>
+      </div>
+    </header>
+
+    <section class="help-grid">
+      <article class="help-card">
+        <h2>Dashboard</h2>
+        <p>Mostra visão geral da retífica, serviços em andamento, valores a receber e pendências.</p>
+      </article>
+      <article class="help-card">
+        <h2>Nova OS</h2>
+        <p>Cadastra uma nova ordem de serviço com cliente, veículo, peça, serviço, valores e previsão.</p>
+      </article>
+      <article class="help-card">
+        <h2>Serviços</h2>
+        <p>Lista todas as OS, permite editar, imprimir, enviar WhatsApp, alterar status e marcar como pago.</p>
+      </article>
+      <article class="help-card">
+        <h2>Clientes</h2>
+        <p>Mostra clientes agrupados por telefone e histórico completo de serviços.</p>
+      </article>
+      <article class="help-card">
+        <h2>Financeiro</h2>
+        <p>Controla recebido, pendente, OS pagas, OS parciais, exportação de relatórios e impressão.</p>
+      </article>
+      <article class="help-card">
+        <h2>Configurações</h2>
+        <p>Personaliza nome da empresa, telefone, endereço, CNPJ, logo e dados da impressão.</p>
+      </article>
+      <article class="help-card">
+        <h2>Backup</h2>
+        <p>Permite exportar e importar os dados do sistema para evitar perda.</p>
+      </article>
+    </section>
+
+    <section class="content-section help-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Operação</p>
+          <h2>Fluxo recomendado</h2>
+        </div>
+      </div>
+      <ol class="help-steps">
+        <li>Cadastrar OS</li>
+        <li>Atualizar status do serviço</li>
+        <li>Avisar cliente pelo WhatsApp</li>
+        <li>Marcar pagamento</li>
+        <li>Consultar histórico</li>
+        <li>Exportar relatório ou imprimir quando precisar</li>
+        <li>Fazer backup regularmente</li>
+      </ol>
+    </section>
+
+    <section class="content-section help-section help-warning">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Atenção</p>
+          <h2>Avisos importantes</h2>
+        </div>
+      </div>
+      <ul class="help-list">
+        <li>Enquanto o sistema estiver local, os dados ficam salvos neste navegador.</li>
+        <li>Use o backup para guardar uma cópia dos dados.</li>
+        <li>Antes de trocar de computador ou navegador, exporte um backup.</li>
+        <li>Futuramente o sistema pode ser conectado à nuvem com login.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

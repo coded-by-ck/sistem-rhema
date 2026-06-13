@@ -23,6 +23,7 @@
   });
 
   applyCompanyBrand();
+  consumeFlashMessage();
 })();
 
 function getCompanySettings() {
@@ -80,14 +81,124 @@ function escapeHtml(value) {
   });
 }
 
+function getOrderSearchText(order) {
+  const number = String(order && order.numeroOs || '').trim();
+  const numericValue = Number(number);
+  const oldDemoNumber = Number.isFinite(numericValue) ?String(numericValue).padStart(3, '0') : number;
+  return [number, `OS-${number}`, `OS-DEMO-${oldDemoNumber}`].join(' ');
+}
+
+function showAppMessage(message) {
+  if (!message) return;
+  let toast = document.getElementById('appToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'appToast';
+    toast.className = 'app-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    document.body.appendChild(toast);
+  }
+
+  toast.textContent = message;
+  toast.classList.add('is-visible');
+  window.clearTimeout(showAppMessage.timer);
+  showAppMessage.timer = window.setTimeout(function () {
+    toast.classList.remove('is-visible');
+  }, 3200);
+}
+
+function setFlashMessage(message) {
+  if (!message) return;
+  sessionStorage.setItem('retificaOS.flashMessage', message);
+}
+
+function consumeFlashMessage() {
+  const message = sessionStorage.getItem('retificaOS.flashMessage');
+  if (!message) return;
+  sessionStorage.removeItem('retificaOS.flashMessage');
+  window.setTimeout(function () {
+    showAppMessage(message);
+  }, 120);
+}
+
+function safePrint(htmlContent, options) {
+  const settings = {
+    title: 'Retífica OS',
+    styles: '',
+    width: 900,
+    height: 700,
+    closeDelay: 1200,
+    ...(options || {})
+  };
+  const printWindow = window.open('', '_blank', `width=${settings.width},height=${settings.height}`);
+
+  if (!printWindow) {
+    alert('Não foi possível abrir a janela de impressão. Verifique se o navegador bloqueou pop-ups.');
+    return false;
+  }
+
+  const closePrintWindow = function () {
+    try {
+      if (!printWindow.closed) printWindow.close();
+    } catch (error) {
+      // Se o navegador impedir o fechamento, a janela fica independente da aplicação principal.
+    }
+  };
+  let printStarted = false;
+  const startPrint = function () {
+    if (printStarted) return;
+    printStarted = true;
+    printWindow.focus();
+    printWindow.print();
+    printWindow.setTimeout(closePrintWindow, settings.closeDelay);
+  };
+
+  const html = [
+    '<!DOCTYPE html>',
+    '<html lang="pt-BR">',
+    '<head>',
+    '<meta charset="UTF-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+    '<title>' + escapeHtml(settings.title) + '</title>',
+    '<style>' + settings.styles + '</style>',
+    '</head>',
+    '<body>',
+    htmlContent,
+    '</body>',
+    '</html>'
+  ].join('');
+
+  printWindow.onafterprint = closePrintWindow;
+  printWindow.onload = startPrint;
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.setTimeout(startPrint, 250);
+
+  return true;
+}
+
 function paymentBadgeClass(status) {
   if (status === 'pago') return 'success';
   if (status === 'parcial') return 'warning';
   return 'danger';
 }
 
+function isOrderRejected(order) {
+  return order && order.statusServico === 'recusado';
+}
+
+function isWorkInProgress(order) {
+  return Boolean(order && !['finalizado', 'entregue', 'recusado'].includes(order.statusServico));
+}
+
 function serviceBadgeClass(status) {
   if (status === 'entregue' || status === 'finalizado') return 'success';
+  if (status === 'aprovado') return 'success';
+  if (status === 'recusado') return 'danger';
+  if (status === 'aguardando aprovação') return 'warning';
+  if (status === 'orçamento') return 'info';
   if (status === 'em execução' || status === 'em análise') return 'warning';
   return '';
 }
@@ -124,15 +235,23 @@ function calculateTotals(orders) {
     acc.totalServicos += total;
     acc.recebido += recebido;
     acc.pendente += getOrderRemaining(order);
+    if (order.statusServico === 'orçamento') acc.orcamento += 1;
+    if (order.statusServico === 'aguardando aprovação') acc.aguardandoAprovacao += 1;
+    if (order.statusServico === 'aprovado') acc.aprovadas += 1;
+    if (order.statusServico === 'recusado') acc.recusadas += 1;
     if (order.statusServico === 'recebido') acc.recebidas += 1;
     if (order.statusServico === 'em execução') acc.emExecucao += 1;
     if (order.statusServico === 'finalizado') acc.finalizadas += 1;
     if (order.statusServico === 'entregue') acc.entregues += 1;
-    if (order.statusServico !== 'finalizado' && order.statusServico !== 'entregue') acc.andamento += 1;
+    if (isWorkInProgress(order)) acc.andamento += 1;
     if (order.statusPagamento !== 'pago') acc.pagamentoPendente += 1;
     return acc;
   }, {
     totalOrdens: 0,
+    orcamento: 0,
+    aguardandoAprovacao: 0,
+    aprovadas: 0,
+    recusadas: 0,
     recebidas: 0,
     emExecucao: 0,
     andamento: 0,

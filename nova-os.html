@@ -16,6 +16,7 @@
       <a href="clientes.html">Clientes</a>
       <a href="financeiro.html">Financeiro</a>
       <a href="configuracoes.html">Configurações</a>
+      <a href="ajuda.html">Ajuda</a>
     </nav>
     <button class="btn btn-ghost logout-button" type="button">Sair</button>
   </aside>
@@ -73,6 +74,10 @@
         <div class="form-grid">
           <label>Status do serviço
             <select name="statusServico">
+              <option value="orçamento">Orçamento</option>
+              <option value="aguardando aprovação">Aguardando aprovação</option>
+              <option value="aprovado">Aprovado</option>
+              <option value="recusado">Recusado</option>
               <option value="recebido">Recebido</option>
               <option value="em análise">Em análise</option>
               <option value="em execução">Em execução</option>
@@ -87,6 +92,25 @@
       <section class="form-section">
         <div class="form-section-title">
           <span>05</span>
+          <h2>Orçamento e aprovação</h2>
+        </div>
+        <div class="form-grid">
+          <label>Valor orçado<input name="valorOrcado" type="number" min="0" step="0.01"></label>
+          <label>Data do orçamento<input name="dataOrcamento" type="date"></label>
+          <label>Aprovado pelo cliente
+            <select name="aprovadoCliente">
+              <option value="não">Não</option>
+              <option value="sim">Sim</option>
+            </select>
+          </label>
+          <label>Data de aprovação<input name="dataAprovacao" type="date"></label>
+          <label class="full-width">Observação do orçamento<textarea name="observacaoOrcamento" rows="3"></textarea></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-title">
+          <span>06</span>
           <h2>Pagamento</h2>
         </div>
         <div class="form-grid">
@@ -105,7 +129,19 @@
 
       <section class="form-section">
         <div class="form-section-title">
-          <span>06</span>
+          <span>07</span>
+          <h2>Retirada da peça</h2>
+        </div>
+        <div class="form-grid">
+          <label>Data de retirada<input name="dataRetirada" type="date"></label>
+          <label>Retirado por<input name="retiradoPor" type="text"></label>
+          <label class="full-width">Observação de retirada<textarea name="observacaoRetirada" rows="3"></textarea></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-title">
+          <span>08</span>
           <h2>Observações</h2>
         </div>
         <div class="form-grid">
