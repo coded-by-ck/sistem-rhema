@@ -253,12 +253,20 @@ function canGenerateReceipt(order) {
 function renderReceiptButton(order, extraClass) {
   const classes = ['btn', 'btn-receipt', extraClass || ''].filter(Boolean).join(' ');
   if (canGenerateReceipt(order)) {
-    return `<button class="${classes}" type="button" data-action="receipt" data-id="${escapeHtml(order.id)}">Recibo</button>`;
+    return `<button class="${classes}" type="button" data-action="receipt" data-id="${escapeHtml(order.id)}">Recibo A4</button>`;
   }
   const title = order && order.statusPagamento === 'sem cobrança'
     ?'Esta OS não possui cobrança registrada'
     :'Registre um pagamento para gerar recibo';
-  return '<button class="' + classes + '" type="button" disabled title="' + title + '">Recibo</button>';
+  return '<button class="' + classes + '" type="button" disabled title="' + title + '">Recibo A4</button>';
+}
+
+function renderQuickReceiptButton(order, extraClass) {
+  const classes = ['btn', 'btn-secondary', extraClass || ''].filter(Boolean).join(' ');
+  if (canGenerateReceipt(order)) {
+    return `<button class="${classes}" type="button" data-action="quick-receipt" data-id="${escapeHtml(order.id)}">Comprovante rápido</button>`;
+  }
+  return '<button class="' + classes + '" type="button" disabled title="Não há pagamento registrado para gerar comprovante">Comprovante rápido</button>';
 }
 
 function canGenerateWithdrawalTerm(order) {
@@ -460,6 +468,163 @@ function imprimirRecibo(order) {
     title: `Recibo OS ${order.numeroOs}`,
     styles,
     width: 820,
+    height: 700
+  });
+}
+
+function imprimirComprovanteRapido(order) {
+  const paidAmount = getReceiptPaidAmount(order);
+  if (paidAmount <= 0) {
+    alert('Não há pagamento registrado para gerar comprovante.');
+    return false;
+  }
+
+  const company = getCompanySettings();
+  const optionalLine = function (label, value) {
+    return value ?`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>` : '';
+  };
+  const optionalDateLine = function (label, value) {
+    return value ?optionalLine(label, formatDate(value)) : '';
+  };
+  const companyPhone = company.telefone ?`<p>${escapeHtml(company.telefone)}</p>` : '';
+  const styles = [
+    'body { background: #fff; color: #000; font-family: Arial, sans-serif; margin: 0; }',
+    '.receipt-small { width: 80mm; border: 1px solid #000; box-sizing: border-box; color: #000; font-family: Arial, sans-serif; font-size: 11px; padding: 8px; }',
+    '.receipt-small h1 { font-size: 14px; line-height: 1.2; margin: 0 0 3px; text-align: center; text-transform: uppercase; }',
+    '.receipt-small .company-phone { margin: 0 0 5px; text-align: center; }',
+    '.receipt-small .title { border-bottom: 1px dashed #000; border-top: 1px dashed #000; font-weight: bold; margin: 6px 0; padding: 5px 0; text-align: center; text-transform: uppercase; }',
+    '.receipt-small p { line-height: 1.25; margin: 2px 0; }',
+    '.receipt-small strong { font-weight: 800; }',
+    '.receipt-small .total { border-bottom: 1px dashed #000; border-top: 1px dashed #000; font-size: 16px; font-weight: bold; margin: 8px 0; padding: 6px 0; text-align: center; }',
+    '.receipt-small .thanks { font-weight: bold; margin-top: 8px; text-align: center; }',
+    '@page { size: A4 portrait; margin: 10mm; }',
+    '@media print { body { background: #fff !important; color: #000 !important; } .receipt-small { break-inside: avoid; page-break-inside: avoid; } }'
+  ].join('');
+  const html = `
+    <main class="receipt-small">
+      <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
+      <div class="company-phone">${companyPhone}</div>
+      <div class="title">Comprovante de pagamento</div>
+      ${optionalLine('OS nº', order.numeroOs)}
+      ${optionalLine('Cliente', order.cliente)}
+      ${optionalLine('Telefone', order.telefone)}
+      ${optionalLine('Serviço', order.tipoServico)}
+      ${optionalLine('Peça/Cabeçote', order.peca)}
+      <div class="total">Valor pago<br>${formatCurrency(paidAmount)}</div>
+      <p><strong>Valor total:</strong> ${formatCurrency(order.valorTotal)}</p>
+      <p><strong>Restante:</strong> ${formatCurrency(getOrderRemaining(order))}</p>
+      ${optionalLine('Forma', order.formaPagamento)}
+      ${optionalLine('Status', order.statusPagamento)}
+      ${optionalDateLine('Data pagamento', order.dataPagamento)}
+      <p><strong>Emissão:</strong> ${escapeHtml(new Date().toLocaleDateString('pt-BR'))}</p>
+      <p class="thanks">Obrigado pela preferência.</p>
+    </main>
+  `;
+
+  return safePrint(html, {
+    title: `Comprovante OS ${order.numeroOs}`,
+    styles,
+    width: 520,
+    height: 640
+  });
+}
+
+function imprimirEtiquetaPeca(order) {
+  if (!order) return false;
+  const company = getCompanySettings();
+  const optionalRow = function (label, value) {
+    return value ?`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>` : '';
+  };
+  const vehicle = [order.carro, order.ano].filter(Boolean).join(' ');
+  const shortNote = order.observacoesPeca
+    ?`<div class="label-note"><strong>Obs. peça:</strong> ${escapeHtml(order.observacoesPeca)}</div>`
+    : '';
+  const styles = [
+    'body { background: #fff; color: #000; font-family: Arial, sans-serif; margin: 0; }',
+    '.label-sheet { padding: 0; }',
+    '.part-label { width: 90mm; min-height: 60mm; border: 2px solid #000; box-sizing: border-box; padding: 7mm; }',
+    '.company { border-bottom: 1px solid #000; font-size: 13px; font-weight: 800; margin: 0 0 5px; padding-bottom: 4px; text-transform: uppercase; }',
+    '.os-code { font-size: 24px; font-weight: 900; line-height: 1; margin: 0 0 6px; }',
+    '.status { border: 1px solid #000; display: inline-block; font-size: 10px; font-weight: 800; margin-bottom: 6px; padding: 2px 5px; text-transform: uppercase; }',
+    'p { font-size: 11px; line-height: 1.2; margin: 2px 0; }',
+    'p strong { font-weight: 800; }',
+    '.label-note { border-top: 1px solid #777; font-size: 10px; line-height: 1.2; margin-top: 5px; padding-top: 4px; }',
+    '@page { size: A4 portrait; margin: 10mm; }',
+    '@media print { body { background: #fff !important; color: #000 !important; } .part-label { break-inside: avoid; page-break-inside: avoid; } }'
+  ].join('');
+  const html = `
+    <main class="label-sheet">
+      <section class="part-label">
+        <p class="company">${escapeHtml(company.nome || 'Retífica OS')}</p>
+        <h1 class="os-code">OS nº ${escapeHtml(order.numeroOs)}</h1>
+        <div class="status">${escapeHtml(order.statusServico || 'Não informado')}</div>
+        ${optionalRow('Cliente', order.cliente)}
+        ${optionalRow('Telefone', order.telefone)}
+        ${optionalRow('Veículo', vehicle)}
+        ${optionalRow('Motor', order.motor)}
+        ${optionalRow('Peça/Cabeçote', order.peca)}
+        ${optionalRow('Serviço', order.tipoServico)}
+        ${optionalRow('Entrada', formatDate(order.dataEntrada))}
+        ${optionalRow('Previsão', order.previsaoEntrega ?formatDate(order.previsaoEntrega) : '')}
+        ${shortNote}
+      </section>
+    </main>
+  `;
+
+  return safePrint(html, {
+    title: `Etiqueta OS ${order.numeroOs}`,
+    styles,
+    width: 700,
+    height: 520
+  });
+}
+
+function imprimirFolhaEtiquetas(orders) {
+  const labelOrders = Array.isArray(orders) ?orders : [];
+  if (!labelOrders.length) {
+    alert('Nenhuma OS encontrada para imprimir etiquetas.');
+    return false;
+  }
+
+  const company = getCompanySettings();
+  const optionalLine = function (label, value) {
+    return value ?`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>` : '';
+  };
+  const labelsHtml = labelOrders.map(function (order) {
+    const vehicle = [order.carro, order.ano].filter(Boolean).join(' ');
+    return `
+      <article class="label-card">
+        <p class="company">${escapeHtml(company.nome || 'Retífica OS')}</p>
+        <h2 class="os-number">OS nº ${escapeHtml(order.numeroOs)}</h2>
+        <p class="status">${escapeHtml(order.statusServico || 'Não informado')}</p>
+        ${optionalLine('Cliente', order.cliente)}
+        ${optionalLine('Telefone', order.telefone)}
+        ${optionalLine('Veículo', vehicle)}
+        ${optionalLine('Peça/Cabeçote', order.peca)}
+        ${optionalLine('Serviço', order.tipoServico)}
+        ${optionalLine('Entrada', formatDate(order.dataEntrada))}
+        ${optionalLine('Previsão', order.previsaoEntrega ?formatDate(order.previsaoEntrega) : '')}
+      </article>
+    `;
+  }).join('');
+  const styles = [
+    'body { background: #fff; color: #000; font-family: Arial, sans-serif; margin: 0; }',
+    '.labels-sheet { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6mm; width: 100%; }',
+    '.label-card { border: 1px solid #000; box-sizing: border-box; break-inside: avoid; font-family: Arial, sans-serif; font-size: 10px; min-height: 50mm; padding: 6px; page-break-inside: avoid; }',
+    '.label-card .company { border-bottom: 1px solid #000; font-size: 11px; font-weight: 800; margin: 0 0 4px; padding-bottom: 3px; text-transform: uppercase; }',
+    '.label-card .os-number { font-size: 18px; font-weight: 900; line-height: 1; margin: 0 0 4px; }',
+    '.label-card .status { border: 1px solid #000; display: inline-block; font-size: 9px; font-weight: 800; margin: 0 0 4px; padding: 2px 4px; text-transform: uppercase; }',
+    '.label-card p { line-height: 1.18; margin: 2px 0; }',
+    '.label-card strong { font-weight: 800; }',
+    '@page { size: A4 portrait; margin: 8mm; }',
+    '@media print { body { background: #fff !important; color: #000 !important; } }'
+  ].join('');
+  const html = `<main class="labels-sheet">${labelsHtml}</main>`;
+
+  return safePrint(html, {
+    title: 'Folha de etiquetas',
+    styles,
+    width: 900,
     height: 700
   });
 }

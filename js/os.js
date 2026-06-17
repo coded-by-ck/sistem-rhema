@@ -6,6 +6,7 @@
   const paymentFilter = document.getElementById('paymentFilter');
   const serviceSort = document.getElementById('serviceSort');
   const ordersResultCount = document.getElementById('ordersResultCount');
+  const printLabelsSheetButton = document.getElementById('printLabelsSheet');
   const quickFilterButtons = document.querySelectorAll('[data-quick-filter]');
   const clientSearch = document.getElementById('clientSearch');
   const clientMetrics = document.getElementById('clientMetrics');
@@ -446,6 +447,22 @@
     });
   }
 
+  function getVisibleServiceOrders() {
+    const search = serviceSearch ?serviceSearch.value.trim().toLowerCase() : '';
+    const selectedStatus = statusFilter ?statusFilter.value : 'todos';
+    const selectedPayment = paymentFilter ?paymentFilter.value : 'todos';
+    const allOrders = RetificaStorage.getOrders();
+    const filteredOrders = allOrders.filter(function (order) {
+      const searchableText = [getOrderSearchText(order), order.cliente, order.telefone, order.carro, order.peca, order.tipoServico].join(' ').toLowerCase();
+      const searchMatch = !search || searchableText.includes(search);
+      const statusMatch = selectedStatus === 'todos'
+        || (selectedStatus === 'atrasadas' ?isOrderLate(order) : order.statusServico === selectedStatus);
+      const paymentMatch = selectedPayment === 'todos' || order.statusPagamento === selectedPayment;
+      return searchMatch && statusMatch && paymentMatch && orderMatchesQuickFilter(order);
+    });
+    return sortOrders(filteredOrders);
+  }
+
   function detailItem(label, value) {
     return value ?`<span><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</span>` : '';
   }
@@ -493,6 +510,7 @@
       ?`<a class="btn btn-secondary" href="${createPaymentWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp pagamento</a>`
       : '';
     const receiptButton = renderReceiptButton(order);
+    const quickReceiptButton = renderQuickReceiptButton(order);
     const withdrawalTermButton = renderWithdrawalTermButton(order);
     const withdrawalWhatsApp = canGenerateWithdrawalTerm(order)
       ?`<a class="btn btn-secondary" href="${createWithdrawalWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp retirada</a>`
@@ -594,7 +612,9 @@
             <span class="card-actions-title">Documentos</span>
             <button class="btn btn-secondary" type="button" data-action="print" data-id="${escapeHtml(order.id)}">Imprimir OS</button>
             ${receiptButton}
+            ${quickReceiptButton}
             ${withdrawalTermButton}
+            <button class="btn btn-secondary" type="button" data-action="label" data-id="${escapeHtml(order.id)}">Etiqueta da peça</button>
           </div>
           <div class="card-actions-group card-actions-admin">
             <span class="card-actions-title">Administração</span>
@@ -634,19 +654,7 @@
 
   function renderOrders() {
     if (!list) return;
-    const search = serviceSearch ?serviceSearch.value.trim().toLowerCase() : '';
-    const selectedStatus = statusFilter ?statusFilter.value : 'todos';
-    const selectedPayment = paymentFilter ?paymentFilter.value : 'todos';
-    const allOrders = RetificaStorage.getOrders();
-    const filteredOrders = allOrders.filter(function (order) {
-      const searchableText = [getOrderSearchText(order), order.cliente, order.telefone, order.carro, order.peca, order.tipoServico].join(' ').toLowerCase();
-      const searchMatch = !search || searchableText.includes(search);
-      const statusMatch = selectedStatus === 'todos'
-        || (selectedStatus === 'atrasadas' ?isOrderLate(order) : order.statusServico === selectedStatus);
-      const paymentMatch = selectedPayment === 'todos' || order.statusPagamento === selectedPayment;
-      return searchMatch && statusMatch && paymentMatch && orderMatchesQuickFilter(order);
-    });
-    const orders = sortOrders(filteredOrders);
+    const orders = getVisibleServiceOrders();
 
     if (openOrderId && !orders.some(function (order) { return order.id === openOrderId; })) {
       openOrderId = '';
@@ -698,7 +706,9 @@
       }
 
       if (button.dataset.action === 'print') imprimirOS(order);
+      if (button.dataset.action === 'label') imprimirEtiquetaPeca(order);
       if (button.dataset.action === 'receipt') imprimirRecibo(order);
+      if (button.dataset.action === 'quick-receipt') imprimirComprovanteRapido(order);
       if (button.dataset.action === 'withdrawal-term') imprimirTermoRetirada(order);
       if (button.dataset.action === 'status') updateOrderStatus(order, button.dataset.status);
       if (button.dataset.action === 'approve') {
@@ -835,6 +845,7 @@
         ?`<a class="btn btn-secondary" href="${createPaymentWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp pagamento</a>`
         : '';
       const receiptButton = renderReceiptButton(order);
+      const quickReceiptButton = renderQuickReceiptButton(order);
       const withdrawalTermButton = renderWithdrawalTermButton(order);
       const withdrawalWhatsApp = canGenerateWithdrawalTerm(order)
         ?`<a class="btn btn-secondary" href="${createWithdrawalWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp retirada</a>`
@@ -905,7 +916,9 @@
             <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
             <button class="btn btn-secondary" type="button" data-action="print" data-id="${escapeHtml(order.id)}">Imprimir OS</button>
             ${receiptButton}
+            ${quickReceiptButton}
             ${withdrawalTermButton}
+            <button class="btn btn-secondary" type="button" data-action="label" data-id="${escapeHtml(order.id)}">Etiqueta da peça</button>
             <a class="btn btn-whatsapp" href="${createWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp</a>
             ${paymentWhatsApp}
             ${withdrawalWhatsApp}
@@ -1001,7 +1014,9 @@
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
       if (button.dataset.action === 'print') imprimirOS(order);
+      if (button.dataset.action === 'label') imprimirEtiquetaPeca(order);
       if (button.dataset.action === 'receipt') imprimirRecibo(order);
+      if (button.dataset.action === 'quick-receipt') imprimirComprovanteRapido(order);
       if (button.dataset.action === 'withdrawal-term') imprimirTermoRetirada(order);
       if (button.dataset.action === 'approve') {
         approveOrder(order);
@@ -1032,6 +1047,11 @@
         renderOrders();
       });
     });
+    if (printLabelsSheetButton) {
+      printLabelsSheetButton.addEventListener('click', function () {
+        imprimirFolhaEtiquetas(getVisibleServiceOrders());
+      });
+    }
     renderOrders();
   }
 

@@ -775,6 +775,13 @@ th {
   gap: 8px;
 }
 
+.filter-actions-row {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .quick-filter-chip {
   min-height: 34px;
   border: 1px solid rgba(52, 58, 68, 0.92);

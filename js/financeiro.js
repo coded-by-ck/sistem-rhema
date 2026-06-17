@@ -727,6 +727,7 @@
       const pendingClass = remaining > 0 ?'has-pending' : '';
       const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
       const receiptButton = renderReceiptButton(order);
+      const quickReceiptButton = renderQuickReceiptButton(order);
       const paymentWhatsApp = hasReceiptPayment(order)
         ?`<a class="btn btn-secondary" href="${createPaymentWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp pagamento</a>`
         : '';
@@ -770,6 +771,7 @@
             ${chargeButton}
             ${paymentWhatsApp}
             ${receiptButton}
+            ${quickReceiptButton}
             ${paidButton}
             <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
           </div>
@@ -804,6 +806,7 @@
       if (!order) return;
       if (button.dataset.action === 'paid') markOrderPaid(order);
       if (button.dataset.action === 'receipt') imprimirRecibo(order);
+      if (button.dataset.action === 'quick-receipt') imprimirComprovanteRapido(order);
     });
   }
 
