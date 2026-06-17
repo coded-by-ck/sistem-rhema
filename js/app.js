@@ -610,7 +610,7 @@ function imprimirFolhaEtiquetas(orders) {
   const styles = [
     'body { background: #fff; color: #000; font-family: Arial, sans-serif; margin: 0; }',
     '.labels-sheet { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6mm; width: 100%; }',
-    '.label-card { border: 1px solid #000; box-sizing: border-box; break-inside: avoid; font-family: Arial, sans-serif; font-size: 10px; min-height: 50mm; padding: 6px; page-break-inside: avoid; }',
+    '.label-card { border: 1px solid #000; box-sizing: border-box; break-inside: avoid; font-family: Arial, sans-serif; font-size: 10px; min-height: 55mm; padding: 6px; page-break-inside: avoid; }',
     '.label-card .company { border-bottom: 1px solid #000; font-size: 11px; font-weight: 800; margin: 0 0 4px; padding-bottom: 3px; text-transform: uppercase; }',
     '.label-card .os-number { font-size: 18px; font-weight: 900; line-height: 1; margin: 0 0 4px; }',
     '.label-card .status { border: 1px solid #000; display: inline-block; font-size: 9px; font-weight: 800; margin: 0 0 4px; padding: 2px 4px; text-transform: uppercase; }',
