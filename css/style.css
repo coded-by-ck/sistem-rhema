@@ -776,10 +776,49 @@ th {
 }
 
 .filter-actions-row {
+  align-items: center;
   display: flex;
   flex: 1 1 100%;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.filter-actions-row[hidden] {
+  display: none !important;
+}
+
+.labels-mode-panel {
+  border-top: 1px solid rgba(52, 58, 68, 0.72);
+  padding-top: 10px;
+}
+
+.filter-actions-title,
+.label-selection-count {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.label-selection-count {
+  margin-left: auto;
+  text-transform: none;
+}
+
+.label-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.label-select input {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
 }
 
 .quick-filter-chip {

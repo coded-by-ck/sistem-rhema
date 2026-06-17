@@ -120,6 +120,8 @@
       retiradoPor: order.retiradoPor || '',
       documentoRetirada: order.documentoRetirada || '',
       observacaoRetirada: order.observacaoRetirada || '',
+      etiquetaImpressa: order.etiquetaImpressa === true,
+      dataEtiquetaImpressa: order.dataEtiquetaImpressa || '',
       observacoesPeca: order.observacoesPeca || order.observacoes || '',
       observacoesGerais: order.observacoesGerais || '',
       criadoEm: order.criadoEm || `${dataEntrada}T00:00:00.000Z`

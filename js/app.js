@@ -580,41 +580,67 @@ function imprimirEtiquetaPeca(order) {
 }
 
 function imprimirFolhaEtiquetas(orders) {
-  const labelOrders = Array.isArray(orders) ?orders : [];
+  const workshopStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
+  const labelOrders = (Array.isArray(orders) ?orders : []).filter(function (order) {
+    return workshopStatuses.includes(order.statusServico);
+  });
   if (!labelOrders.length) {
-    alert('Nenhuma OS encontrada para imprimir etiquetas.');
+    alert('Nenhuma peça na oficina encontrada para imprimir etiquetas.');
     return false;
   }
 
   const company = getCompanySettings();
   const optionalLine = function (label, value) {
-    return value ?`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>` : '';
+    return value ?`<p class="label-secondary"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>` : '';
+  };
+  const optionalMainLine = function (label, value, className) {
+    return value ?`<div class="${className || 'label-main-info'}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>` : '';
+  };
+  const optionalMetaLine = function (label, value) {
+    return value ?`<span class="label-secondary"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</span>` : '';
   };
   const labelsHtml = labelOrders.map(function (order) {
     const vehicle = [order.carro, order.ano].filter(Boolean).join(' ');
     return `
       <article class="label-card">
-        <p class="company">${escapeHtml(company.nome || 'Retífica OS')}</p>
-        <h2 class="os-number">OS nº ${escapeHtml(order.numeroOs)}</h2>
-        <p class="status">${escapeHtml(order.statusServico || 'Não informado')}</p>
-        ${optionalLine('Cliente', order.cliente)}
-        ${optionalLine('Telefone', order.telefone)}
-        ${optionalLine('Veículo', vehicle)}
-        ${optionalLine('Peça/Cabeçote', order.peca)}
-        ${optionalLine('Serviço', order.tipoServico)}
-        ${optionalLine('Entrada', formatDate(order.dataEntrada))}
-        ${optionalLine('Previsão', order.previsaoEntrega ?formatDate(order.previsaoEntrega) : '')}
+        <div class="label-top">
+          <div class="label-meta-row">
+            <p class="company">${escapeHtml(company.nome || 'Retífica OS')}</p>
+            <p class="status">${escapeHtml(order.statusServico || 'Não informado')}</p>
+          </div>
+          <h2 class="os-number">OS Nº ${escapeHtml(order.numeroOs)}</h2>
+        </div>
+        <div class="label-body">
+          ${optionalMainLine('Cliente', order.cliente, 'label-client')}
+          ${optionalMainLine('Peça', order.peca)}
+          ${optionalMainLine('Serviço', order.tipoServico)}
+          ${optionalLine('Veículo', vehicle)}
+          ${optionalLine('Tel', order.telefone)}
+        </div>
+        <div class="label-footer">
+          ${optionalMetaLine('Entrada', formatDate(order.dataEntrada))}
+          ${optionalMetaLine('Previsão', order.previsaoEntrega ?formatDate(order.previsaoEntrega) : '')}
+        </div>
       </article>
     `;
   }).join('');
   const styles = [
     'body { background: #fff; color: #000; font-family: Arial, sans-serif; margin: 0; }',
-    '.labels-sheet { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6mm; width: 100%; }',
-    '.label-card { border: 1px solid #000; box-sizing: border-box; break-inside: avoid; font-family: Arial, sans-serif; font-size: 10px; min-height: 55mm; padding: 6px; page-break-inside: avoid; }',
-    '.label-card .company { border-bottom: 1px solid #000; font-size: 11px; font-weight: 800; margin: 0 0 4px; padding-bottom: 3px; text-transform: uppercase; }',
-    '.label-card .os-number { font-size: 18px; font-weight: 900; line-height: 1; margin: 0 0 4px; }',
-    '.label-card .status { border: 1px solid #000; display: inline-block; font-size: 9px; font-weight: 800; margin: 0 0 4px; padding: 2px 4px; text-transform: uppercase; }',
-    '.label-card p { line-height: 1.18; margin: 2px 0; }',
+    '.labels-sheet { align-items: start; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5mm; width: 194mm; max-width: 100%; }',
+    '.label-card { border: 2px solid #000; box-sizing: border-box; break-inside: avoid; display: flex; flex-direction: column; font-family: Arial, sans-serif; font-size: 10px; min-height: 68mm; overflow-wrap: anywhere; padding: 8px; page-break-inside: avoid; }',
+    '.label-top { border-bottom: 1px solid #000; margin-bottom: 7px; padding-bottom: 6px; }',
+    '.label-meta-row { align-items: flex-start; display: flex; gap: 6px; justify-content: space-between; margin-bottom: 5px; }',
+    '.label-card .company { font-size: 9px; font-weight: 800; letter-spacing: 0; margin: 0; text-transform: uppercase; }',
+    '.label-card .os-number { font-size: 28px; font-weight: 900; line-height: 0.95; margin: 0; }',
+    '.label-card .status { border: 1px solid #000; display: inline-block; flex: 0 0 auto; font-size: 9px; font-weight: 800; line-height: 1; margin: 0; max-width: 34mm; padding: 3px 5px; text-align: center; text-transform: uppercase; }',
+    '.label-body { display: grid; flex: 1; gap: 5px; }',
+    '.label-card p { line-height: 1.18; margin: 0; }',
+    '.label-card .label-client span { display: block; font-size: 18px; font-weight: 900; line-height: 1.12; }',
+    '.label-card .label-client strong { display: block; font-size: 10px; line-height: 1; text-transform: uppercase; }',
+    '.label-card .label-main-info span { display: block; font-size: 14px; font-weight: 800; line-height: 1.14; }',
+    '.label-card .label-main-info strong { display: block; font-size: 10px; line-height: 1; text-transform: uppercase; }',
+    '.label-card .label-secondary { font-size: 11px; line-height: 1.15; }',
+    '.label-footer { border-top: 1px solid #000; display: flex; flex-wrap: wrap; gap: 5px 10px; justify-content: space-between; margin-top: auto; padding-top: 5px; }',
     '.label-card strong { font-weight: 800; }',
     '@page { size: A4 portrait; margin: 8mm; }',
     '@media print { body { background: #fff !important; color: #000 !important; } }'

@@ -6,7 +6,13 @@
   const paymentFilter = document.getElementById('paymentFilter');
   const serviceSort = document.getElementById('serviceSort');
   const ordersResultCount = document.getElementById('ordersResultCount');
+  const enterLabelsModeButton = document.getElementById('enterLabelsMode');
+  const exitLabelsModeButton = document.getElementById('exitLabelsMode');
+  const labelsModePanel = document.getElementById('labelsModePanel');
   const printLabelsSheetButton = document.getElementById('printLabelsSheet');
+  const selectWorkshopLabelsButton = document.getElementById('selectWorkshopLabels');
+  const clearLabelSelectionButton = document.getElementById('clearLabelSelection');
+  const labelSelectionCount = document.getElementById('labelSelectionCount');
   const quickFilterButtons = document.querySelectorAll('[data-quick-filter]');
   const clientSearch = document.getElementById('clientSearch');
   const clientMetrics = document.getElementById('clientMetrics');
@@ -17,6 +23,9 @@
   let selectedClientKey = '';
   let openOrderId = '';
   let activeQuickFilter = '';
+  let labelsModeActive = false;
+  const selectedLabelOrderIds = new Set();
+  const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
   function toNumber(value) {
     const number = Number(value || 0);
@@ -398,6 +407,40 @@
     return ['orçamento', 'aguardando aprovação'].includes(order.statusServico);
   }
 
+  function canUseWorkshopLabel(order) {
+    return Boolean(order && workshopLabelStatuses.includes(order.statusServico));
+  }
+
+  function updateLabelSelectionCount() {
+    if (!labelSelectionCount) return;
+    const count = selectedLabelOrderIds.size;
+    labelSelectionCount.textContent = `${count} ${count === 1 ?'selecionada' : 'selecionadas'}`;
+  }
+
+  function updateLabelsModeUi() {
+    if (labelsModePanel) labelsModePanel.hidden = !labelsModeActive;
+    if (enterLabelsModeButton) enterLabelsModeButton.hidden = labelsModeActive;
+  }
+
+  function markLabelsPrinted(orders) {
+    const today = RetificaStorage.getTodayIso();
+    orders.forEach(function (order) {
+      RetificaStorage.updateOrder(order.id, {
+        ...order,
+        etiquetaImpressa: true,
+        dataEtiquetaImpressa: today
+      });
+    });
+  }
+
+  function askToMarkLabelsPrinted(orders, afterMark) {
+    window.setTimeout(function () {
+      if (!confirm(orders.length > 1 ?'Deseja marcar essas OS como etiqueta impressa?' : 'Deseja marcar essa OS como etiqueta impressa?')) return;
+      markLabelsPrinted(orders);
+      if (afterMark) afterMark();
+    }, 1200);
+  }
+
   function getOrderNumberValue(order) {
     const matches = String(order.numeroOs || '').match(/\d+/g);
     const number = Number(matches ?matches.join('') : 0);
@@ -458,7 +501,8 @@
       const statusMatch = selectedStatus === 'todos'
         || (selectedStatus === 'atrasadas' ?isOrderLate(order) : order.statusServico === selectedStatus);
       const paymentMatch = selectedPayment === 'todos' || order.statusPagamento === selectedPayment;
-      return searchMatch && statusMatch && paymentMatch && orderMatchesQuickFilter(order);
+      const labelsModeMatch = !labelsModeActive || canUseWorkshopLabel(order);
+      return searchMatch && statusMatch && paymentMatch && orderMatchesQuickFilter(order) && labelsModeMatch;
     });
     return sortOrders(filteredOrders);
   }
@@ -497,6 +541,13 @@
     const remaining = getOrderRemaining(order);
     const lateBadge = late ?'<span class="badge danger">Atrasada</span>' : '';
     const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
+    const workshopLabel = canUseWorkshopLabel(order);
+    const labelStatusBadge = labelsModeActive && workshopLabel
+      ?`<span class="badge info">${order.etiquetaImpressa ?'Etiqueta impressa' : 'Sem etiqueta'}</span>`
+      : '';
+    const labelCheckbox = labelsModeActive && workshopLabel
+      ?`<label class="label-select"><input type="checkbox" data-label-select="${escapeHtml(order.id)}" ${selectedLabelOrderIds.has(order.id) ?'checked' : ''}> Etiqueta</label>`
+      : '';
     const paymentSummaryClass = remaining > 0 ?'value-pending' : 'value-paid';
     const waitingApproval = order.statusServico === 'aguardando aprovação';
     const sendBudgetAction = canSendBudget(order)
@@ -629,8 +680,9 @@
       <article class="order-card ${late ?'is-late' : ''} ${waitingApproval ?'waiting-approval' : ''} ${expanded ?'is-expanded' : ''}" data-id="${escapeHtml(order.id)}" data-os-id="${escapeHtml(order.id)}">
         <div class="order-card-head">
           <div>
+            ${labelCheckbox}
             <span class="os-number">${escapeHtml(order.numeroOs)}</span>
-            <h3>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge}</h3>
+            <h3>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge} ${labelStatusBadge}</h3>
           </div>
           ${lateBadge}
         </div>
@@ -660,14 +712,21 @@
       openOrderId = '';
     }
 
+    const visibleIds = new Set(orders.map(function (order) { return order.id; }));
+    Array.from(selectedLabelOrderIds).forEach(function (id) {
+      if (!visibleIds.has(id)) selectedLabelOrderIds.delete(id);
+    });
+
     if (ordersResultCount) {
       ordersResultCount.textContent = `${orders.length} ${orders.length === 1 ?'ordem encontrada' : 'ordens encontradas'}`;
     }
+    updateLabelSelectionCount();
+    updateLabelsModeUi();
     updateQuickFilterState();
 
     list.innerHTML = orders.length
       ?orders.map(renderOrderCard).join('')
-      : '<div class="empty-state">Nenhuma ordem encontrada para os filtros selecionados.</div>';
+      : `<div class="empty-state">${labelsModeActive ?'Nenhuma peça na oficina disponível para etiqueta.' : 'Nenhuma ordem encontrada para os filtros selecionados.'}</div>`;
   }
 
   function updateOrderStatus(order, status) {
@@ -684,6 +743,18 @@
   }
 
   if (list) {
+    list.addEventListener('change', function (event) {
+      const checkbox = event.target.closest('input[data-label-select]');
+      if (!checkbox) return;
+      if (!labelsModeActive) return;
+      if (checkbox.checked) {
+        selectedLabelOrderIds.add(checkbox.dataset.labelSelect);
+      } else {
+        selectedLabelOrderIds.delete(checkbox.dataset.labelSelect);
+      }
+      updateLabelSelectionCount();
+    });
+
     list.addEventListener('click', function (event) {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
@@ -706,7 +777,12 @@
       }
 
       if (button.dataset.action === 'print') imprimirOS(order);
-      if (button.dataset.action === 'label') imprimirEtiquetaPeca(order);
+      if (button.dataset.action === 'label' && imprimirEtiquetaPeca(order)) {
+        askToMarkLabelsPrinted([order], function () {
+          selectedLabelOrderIds.delete(order.id);
+          renderOrders();
+        });
+      }
       if (button.dataset.action === 'receipt') imprimirRecibo(order);
       if (button.dataset.action === 'quick-receipt') imprimirComprovanteRapido(order);
       if (button.dataset.action === 'withdrawal-term') imprimirTermoRetirada(order);
@@ -831,6 +907,9 @@
     const ordersHtml = client.ordens.map(function (order) {
       const remaining = getOrderRemaining(order);
       const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
+      const labelStatusBadge = canUseWorkshopLabel(order)
+        ?`<span class="badge info">${order.etiquetaImpressa ?'Etiqueta impressa' : 'Sem etiqueta'}</span>`
+        : '';
       const sendBudgetAction = canSendBudget(order)
         ?`<a class="btn btn-whatsapp" href="${createBudgetWhatsAppLink(order)}" target="_blank" rel="noopener">Enviar orçamento</a>`
         : '';
@@ -881,6 +960,7 @@
           <div class="history-order-head">
             <span class="os-number">${escapeHtml(order.numeroOs)}</span>
             ${demoBadge}
+            ${labelStatusBadge}
             <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
             <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
           </div>
@@ -1014,7 +1094,11 @@
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
       if (button.dataset.action === 'print') imprimirOS(order);
-      if (button.dataset.action === 'label') imprimirEtiquetaPeca(order);
+      if (button.dataset.action === 'label' && imprimirEtiquetaPeca(order)) {
+        askToMarkLabelsPrinted([order], function () {
+          renderClients();
+        });
+      }
       if (button.dataset.action === 'receipt') imprimirRecibo(order);
       if (button.dataset.action === 'quick-receipt') imprimirComprovanteRapido(order);
       if (button.dataset.action === 'withdrawal-term') imprimirTermoRetirada(order);
@@ -1047,9 +1131,49 @@
         renderOrders();
       });
     });
+    if (enterLabelsModeButton) {
+      enterLabelsModeButton.addEventListener('click', function () {
+        labelsModeActive = true;
+        selectedLabelOrderIds.clear();
+        renderOrders();
+      });
+    }
+    if (exitLabelsModeButton) {
+      exitLabelsModeButton.addEventListener('click', function () {
+        labelsModeActive = false;
+        selectedLabelOrderIds.clear();
+        renderOrders();
+      });
+    }
+    if (selectWorkshopLabelsButton) {
+      selectWorkshopLabelsButton.addEventListener('click', function () {
+        getVisibleServiceOrders().forEach(function (order) {
+          if (canUseWorkshopLabel(order)) selectedLabelOrderIds.add(order.id);
+        });
+        renderOrders();
+      });
+    }
+    if (clearLabelSelectionButton) {
+      clearLabelSelectionButton.addEventListener('click', function () {
+        selectedLabelOrderIds.clear();
+        renderOrders();
+      });
+    }
     if (printLabelsSheetButton) {
       printLabelsSheetButton.addEventListener('click', function () {
-        imprimirFolhaEtiquetas(getVisibleServiceOrders());
+        const selectedOrders = Array.from(selectedLabelOrderIds)
+          .map(function (id) { return RetificaStorage.getOrderById(id); })
+          .filter(canUseWorkshopLabel);
+        if (!selectedOrders.length) {
+          alert('Selecione pelo menos uma OS para imprimir etiquetas.');
+          return;
+        }
+        if (imprimirFolhaEtiquetas(selectedOrders)) {
+          askToMarkLabelsPrinted(selectedOrders, function () {
+            selectedLabelOrderIds.clear();
+            renderOrders();
+          });
+        }
       });
     }
     renderOrders();
