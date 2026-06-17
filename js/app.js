@@ -235,7 +235,7 @@ function getReceiptPaidAmount(order) {
   const safeEntrada = Number.isFinite(entrada) ?entrada : 0;
   if (order && order.statusPagamento === 'pago') return safeTotal;
   if (order && order.statusPagamento === 'sem cobrança') return 0;
-  return Math.min(safeEntrada, safeTotal);
+  return safeTotal > 0 ?Math.min(safeEntrada, safeTotal) : safeEntrada;
 }
 
 function hasReceiptPayment(order) {
