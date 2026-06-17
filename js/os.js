@@ -11,6 +11,7 @@
   const params = new URLSearchParams(window.location.search);
   const editId = params.get('id') || params.get('edit');
   let selectedClientKey = '';
+  let openOrderId = '';
 
   function toNumber(value) {
     const number = Number(value || 0);
@@ -66,6 +67,9 @@
     const dataRetirada = statusServico === 'entregue'
       ?(data.get('dataRetirada') || RetificaStorage.getTodayIso())
       : (data.get('dataRetirada') || '');
+    const dataPagamento = statusPagamento === 'pago'
+      ?(data.get('dataPagamento') || RetificaStorage.getTodayIso())
+      : (data.get('dataPagamento') || '');
 
     // Em edição, número e data original são preservados mesmo se o HTML for alterado no navegador.
     return {
@@ -84,6 +88,10 @@
       valorRestante: statusPagamento === 'pago' ?0 : Math.max(valorTotal - valorEntrada, 0),
       statusServico,
       statusPagamento,
+      formaPagamento: data.get('formaPagamento') || '',
+      dataPagamento,
+      recebidoPor: String(data.get('recebidoPor') || '').trim(),
+      observacaoPagamento: String(data.get('observacaoPagamento') || '').trim(),
       previsaoEntrega: data.get('previsaoEntrega') || '',
       valorOrcado: toNumber(data.get('valorOrcado')),
       dataOrcamento: data.get('dataOrcamento') || '',
@@ -92,6 +100,7 @@
       observacaoOrcamento: String(data.get('observacaoOrcamento') || '').trim(),
       dataRetirada,
       retiradoPor: String(data.get('retiradoPor') || '').trim(),
+      documentoRetirada: String(data.get('documentoRetirada') || '').trim(),
       observacaoRetirada: String(data.get('observacaoRetirada') || '').trim(),
       observacoesPeca: String(data.get('observacoesPeca') || '').trim(),
       observacoesGerais: String(data.get('observacoesGerais') || '').trim(),
@@ -122,6 +131,10 @@
     form.valorEntrada.value = toNumber(order.valorEntrada);
     form.statusServico.value = order.statusServico || 'recebido';
     form.statusPagamento.value = order.statusPagamento || 'pendente';
+    form.formaPagamento.value = order.formaPagamento || '';
+    form.dataPagamento.value = order.dataPagamento || '';
+    form.recebidoPor.value = order.recebidoPor || '';
+    form.observacaoPagamento.value = order.observacaoPagamento || '';
     form.previsaoEntrega.value = order.previsaoEntrega || '';
     form.valorOrcado.value = toNumber(order.valorOrcado) || '';
     form.dataOrcamento.value = order.dataOrcamento || '';
@@ -130,6 +143,7 @@
     form.observacaoOrcamento.value = order.observacaoOrcamento || '';
     form.dataRetirada.value = order.dataRetirada || '';
     form.retiradoPor.value = order.retiradoPor || '';
+    form.documentoRetirada.value = order.documentoRetirada || '';
     form.observacaoRetirada.value = order.observacaoRetirada || '';
     form.observacoesPeca.value = order.observacoesPeca || '';
     form.observacoesGerais.value = order.observacoesGerais || '';
@@ -169,6 +183,11 @@
       if (['aprovado', 'em execução', 'finalizado', 'entregue'].includes(form.statusServico.value)) {
         form.aprovadoCliente.value = 'sim';
         if (!form.dataAprovacao.value) form.dataAprovacao.value = RetificaStorage.getTodayIso();
+      }
+    });
+    form.statusPagamento.addEventListener('change', function () {
+      if (form.statusPagamento.value === 'pago' && !form.dataPagamento.value) {
+        form.dataPagamento.value = RetificaStorage.getTodayIso();
       }
     });
 
@@ -220,7 +239,8 @@
     ].join('');
     const withdrawalItems = [
       optionalDateItem('Data de retirada', order.dataRetirada),
-      optionalItem('Retirado por', order.retiradoPor)
+      optionalItem('Retirado por', order.retiradoPor),
+      optionalItem('Documento de quem retirou', order.documentoRetirada)
     ].join('');
     const budgetSection = budgetItems || order.observacaoOrcamento
       ?`<section class="compact-section"><h2>Orçamento e aprovação</h2>${budgetItems ?`<div class="grid">${budgetItems}</div>` : ''}${order.observacaoOrcamento ?`<div class="notes">${escapeHtml(order.observacaoOrcamento)}</div>` : ''}</section>`
@@ -326,6 +346,7 @@
       ...order,
       statusPagamento: 'pago',
       valorEntrada: toNumber(order.valorTotal),
+      dataPagamento: order.dataPagamento || RetificaStorage.getTodayIso(),
       valorRestante: 0
     });
   }
@@ -348,11 +369,45 @@
   }
 
   function canSendBudget(order) {
-    return toNumber(order.valorOrcado) > 0 || ['orçamento', 'aguardando aprovação'].includes(order.statusServico);
+    if (!order || order.statusPagamento === 'pago') return false;
+    const status = order.statusServico || '';
+    const budgetStatuses = ['orçamento', 'aguardando aprovação', 'em análise'];
+    const blockedStatuses = ['aprovado', 'em execução', 'finalizado', 'entregue', 'recusado'];
+    if (budgetStatuses.includes(status)) return true;
+    return toNumber(order.valorOrcado) > 0 && !blockedStatuses.includes(status);
   }
 
   function canApproveOrReject(order) {
     return ['orçamento', 'aguardando aprovação'].includes(order.statusServico);
+  }
+
+  function detailItem(label, value) {
+    return value ?`<span><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</span>` : '';
+  }
+
+  function detailDateItem(label, value) {
+    return value ?detailItem(label, formatDate(value)) : '';
+  }
+
+  function detailMoneyItem(label, value) {
+    return toNumber(value) > 0 ?`<span><strong>${escapeHtml(label)}</strong><span class="money-value">${formatCurrency(value)}</span></span>` : '';
+  }
+
+  function scrollToOpenOrder(id) {
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () {
+      const escapedId = window.CSS && CSS.escape ?CSS.escape(id) : String(id).replace(/"/g, '\\"');
+      const card = document.querySelector(`[data-os-id="${escapedId}"]`);
+      if (card) {
+        const headerOffset = 240;
+        const cardTop = card.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({
+          top: Math.max(cardTop - headerOffset, 0),
+          behavior: 'smooth'
+        });
+      }
+      });
+    });
   }
 
   function renderOrderCard(order) {
@@ -369,25 +424,77 @@
       ?`<button class="btn btn-mini btn-mini-success" type="button" data-action="approve" data-id="${escapeHtml(order.id)}">Aprovado</button>
         <button class="btn btn-mini btn-mini-danger" type="button" data-action="reject" data-id="${escapeHtml(order.id)}">Recusado</button>`
       : '';
-
-    return `
-      <article class="order-card ${late ?'is-late' : ''} ${waitingApproval ?'waiting-approval' : ''}" data-id="${escapeHtml(order.id)}">
-        <div class="order-card-head">
-          <div>
-            <span class="os-number">${escapeHtml(order.numeroOs)}</span>
-            <h3>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge}</h3>
-          </div>
-          ${lateBadge}
-        </div>
+    const paymentWhatsApp = hasReceiptPayment(order)
+      ?`<a class="btn btn-secondary" href="${createPaymentWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp pagamento</a>`
+      : '';
+    const receiptButton = renderReceiptButton(order);
+    const withdrawalTermButton = renderWithdrawalTermButton(order);
+    const withdrawalWhatsApp = canGenerateWithdrawalTerm(order)
+      ?`<a class="btn btn-secondary" href="${createWithdrawalWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp retirada</a>`
+      : '';
+    const expanded = openOrderId === order.id;
+    const hasBudgetDetails = toNumber(order.valorOrcado) > 0 || order.dataOrcamento || order.dataAprovacao || order.observacaoOrcamento;
+    const hasWithdrawalDetails = order.dataRetirada || order.retiradoPor || order.documentoRetirada || order.observacaoRetirada;
+    const hasPaymentDetails = order.formaPagamento || order.dataPagamento || order.recebidoPor || order.observacaoPagamento;
+    const withdrawalDetailItems = [
+      detailDateItem('Data de retirada', order.dataRetirada),
+      detailItem('Retirado por', order.retiradoPor),
+      detailItem('Documento retirada', order.documentoRetirada)
+    ].join('');
+    const budgetDetails = hasBudgetDetails
+      ?`<div class="detail-section">
+        <h4>Orçamento</h4>
         <div class="order-info-grid">
-          <span><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</span>
-          <span><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')} ${escapeHtml(order.ano)}</span>
-          <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
-          <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
-          <span><strong>Valor orçado</strong><span class="money-value">${formatCurrency(order.valorOrcado)}</span></span>
-          <span><strong>Aprovação</strong>${escapeHtml(order.aprovadoCliente || 'não')} ${order.dataAprovacao ?`em ${formatDate(order.dataAprovacao)}` : ''}</span>
-          <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
-          <span><strong>Previsão</strong>${formatDate(order.previsaoEntrega)}</span>
+          ${detailMoneyItem('Valor orçado', order.valorOrcado)}
+          ${detailDateItem('Data do orçamento', order.dataOrcamento)}
+          ${detailItem('Aprovação', order.aprovadoCliente || 'não')}
+          ${detailDateItem('Data de aprovação', order.dataAprovacao)}
+        </div>
+        ${order.observacaoOrcamento ?`<div class="order-note"><strong>Observação do orçamento</strong><p>${escapeHtml(order.observacaoOrcamento)}</p></div>` : ''}
+      </div>`
+      : '';
+    const withdrawalDetails = hasWithdrawalDetails
+      ?`<div class="detail-section">
+        <h4>Retirada</h4>
+        ${withdrawalDetailItems ?`<div class="order-info-grid">${withdrawalDetailItems}</div>` : ''}
+        ${order.observacaoRetirada ?`<div class="order-note"><strong>Observação de retirada</strong><p>${escapeHtml(order.observacaoRetirada)}</p></div>` : ''}
+      </div>`
+      : '';
+    const paymentItems = [
+      detailItem('Forma de pagamento', order.formaPagamento),
+      detailDateItem('Data do pagamento', order.dataPagamento),
+      detailItem('Recebido por', order.recebidoPor)
+    ].join('');
+    const paymentDetails = hasPaymentDetails
+      ?`<div class="detail-section">
+        <h4>Pagamento</h4>
+        ${paymentItems ?`<div class="order-info-grid">${paymentItems}</div>` : ''}
+        ${order.observacaoPagamento ?`<div class="order-note"><strong>Observação do pagamento</strong><p>${escapeHtml(order.observacaoPagamento)}</p></div>` : ''}
+      </div>`
+      : '';
+    const notesDetails = order.observacoesPeca || order.observacoesGerais
+      ?`<div class="detail-section">
+        <h4>Observações</h4>
+        <div class="history-notes-grid">
+          ${order.observacoesPeca ?`<div class="order-note"><strong>Observações da peça</strong><p>${escapeHtml(order.observacoesPeca)}</p></div>` : ''}
+          ${order.observacoesGerais ?`<div class="order-note"><strong>Observações gerais</strong><p>${escapeHtml(order.observacoesGerais)}</p></div>` : ''}
+        </div>
+      </div>`
+      : '';
+    const detailsHtml = expanded
+      ?`<div class="order-card-details">
+        <div class="detail-section">
+          <h4>Dados da OS</h4>
+          <div class="order-info-grid">
+            <span><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</span>
+            <span><strong>Carro</strong>${escapeHtml(order.carro || 'Não informado')}</span>
+            ${detailItem('Ano', order.ano)}
+            ${detailItem('Motor', order.motor)}
+            <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
+            <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+            <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
+            ${detailDateItem('Previsão', order.previsaoEntrega)}
+          </div>
         </div>
         <div class="order-values">
           <span><strong>Total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
@@ -398,20 +505,64 @@
           <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
           <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
         </div>
-        <div class="quick-actions">
-          ${sendBudgetAction}
-          ${approvalActions}
-          <button class="btn btn-mini" type="button" data-action="status" data-status="em execução" data-id="${escapeHtml(order.id)}">Em execução</button>
-          <button class="btn btn-mini" type="button" data-action="status" data-status="finalizado" data-id="${escapeHtml(order.id)}">Finalizado</button>
-          <button class="btn btn-mini" type="button" data-action="status" data-status="entregue" data-id="${escapeHtml(order.id)}">Entregue</button>
-          <button class="btn btn-mini btn-mini-success" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Pago</button>
+        ${budgetDetails}
+        ${withdrawalDetails}
+        ${paymentDetails}
+        ${notesDetails}
+        <div class="card-actions service-card-actions">
+          <div class="card-actions-group card-actions-flow">
+            <span class="card-actions-title">Fluxo</span>
+            ${sendBudgetAction}
+            ${approvalActions}
+            <button class="btn btn-mini" type="button" data-action="status" data-status="em execução" data-id="${escapeHtml(order.id)}">Em execução</button>
+            <button class="btn btn-mini" type="button" data-action="status" data-status="finalizado" data-id="${escapeHtml(order.id)}">Finalizado</button>
+            <button class="btn btn-mini" type="button" data-action="status" data-status="entregue" data-id="${escapeHtml(order.id)}">Entregue</button>
+            <button class="btn btn-mini btn-mini-success" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Pago</button>
+          </div>
+          <div class="card-actions-group card-actions-communication">
+            <span class="card-actions-title">Comunicação</span>
+            <a class="btn btn-whatsapp" href="${createWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp</a>
+            ${paymentWhatsApp}
+            ${withdrawalWhatsApp}
+          </div>
+          <div class="card-actions-group card-actions-documents">
+            <span class="card-actions-title">Documentos</span>
+            <button class="btn btn-secondary" type="button" data-action="print" data-id="${escapeHtml(order.id)}">Imprimir OS</button>
+            ${receiptButton}
+            ${withdrawalTermButton}
+          </div>
+          <div class="card-actions-group card-actions-admin">
+            <span class="card-actions-title">Administração</span>
+            <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar</a>
+            <button class="btn btn-danger" type="button" data-action="delete" data-id="${escapeHtml(order.id)}">Excluir</button>
+          </div>
         </div>
-        <div class="card-actions">
-          <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar</a>
-          <button class="btn btn-danger" type="button" data-action="delete" data-id="${escapeHtml(order.id)}">Excluir</button>
-          <a class="btn btn-whatsapp" href="${createWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp</a>
-          <button class="btn btn-secondary" type="button" data-action="print" data-id="${escapeHtml(order.id)}">Imprimir OS</button>
+      </div>`
+      : '';
+
+    return `
+      <article class="order-card ${late ?'is-late' : ''} ${waitingApproval ?'waiting-approval' : ''} ${expanded ?'is-expanded' : ''}" data-id="${escapeHtml(order.id)}" data-os-id="${escapeHtml(order.id)}">
+        <div class="order-card-head">
+          <div>
+            <span class="os-number">${escapeHtml(order.numeroOs)}</span>
+            <h3>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge}</h3>
+          </div>
+          ${lateBadge}
         </div>
+        <div class="order-summary-grid">
+          <span><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</span>
+          <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+          <span><strong>Total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
+          <span class="${paymentSummaryClass}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
+        </div>
+        <div class="order-card-footer">
+          <div class="status-row">
+            <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
+            <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
+          </div>
+          <button class="btn btn-secondary btn-details-toggle" type="button" data-action="details" data-id="${escapeHtml(order.id)}">${expanded ?'Ocultar detalhes' : 'Ver detalhes'}</button>
+        </div>
+        ${detailsHtml}
       </article>
     `;
   }
@@ -429,6 +580,10 @@
       const paymentMatch = selectedPayment === 'todos' || order.statusPagamento === selectedPayment;
       return searchMatch && statusMatch && paymentMatch;
     });
+
+    if (openOrderId && !orders.some(function (order) { return order.id === openOrderId; })) {
+      openOrderId = '';
+    }
 
     list.innerHTML = orders.length
       ?orders.map(renderOrderCard).join('')
@@ -452,17 +607,27 @@
     list.addEventListener('click', function (event) {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
+      if (button.dataset.action === 'details') {
+        const nextOpenId = openOrderId === button.dataset.id ?'' : button.dataset.id;
+        openOrderId = nextOpenId;
+        renderOrders();
+        if (nextOpenId) scrollToOpenOrder(nextOpenId);
+        return;
+      }
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
 
       if (button.dataset.action === 'delete') {
         if (confirm(`Tem certeza que deseja excluir a OS nº ${order.numeroOs}? Esta ação não pode ser desfeita.`)) {
           RetificaStorage.deleteOrder(order.id);
+          if (openOrderId === order.id) openOrderId = '';
           renderOrders();
         }
       }
 
       if (button.dataset.action === 'print') imprimirOS(order);
+      if (button.dataset.action === 'receipt') imprimirRecibo(order);
+      if (button.dataset.action === 'withdrawal-term') imprimirTermoRetirada(order);
       if (button.dataset.action === 'status') updateOrderStatus(order, button.dataset.status);
       if (button.dataset.action === 'approve') {
         approveOrder(order);
@@ -594,6 +759,14 @@
       const paidButton = remaining > 0 || order.statusPagamento !== 'pago'
         ?`<button class="btn btn-mini btn-mini-success" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>`
         : '';
+      const paymentWhatsApp = hasReceiptPayment(order)
+        ?`<a class="btn btn-secondary" href="${createPaymentWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp pagamento</a>`
+        : '';
+      const receiptButton = renderReceiptButton(order);
+      const withdrawalTermButton = renderWithdrawalTermButton(order);
+      const withdrawalWhatsApp = canGenerateWithdrawalTerm(order)
+        ?`<a class="btn btn-secondary" href="${createWithdrawalWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp retirada</a>`
+        : '';
       const hasBudgetContext = toNumber(order.valorOrcado) > 0
         || order.dataOrcamento
         || order.dataAprovacao
@@ -605,7 +778,8 @@
         hasBudgetContext ?`<span><strong>Aprovação</strong>${escapeHtml(order.aprovadoCliente || 'não')}</span>` : '',
         order.dataAprovacao ?`<span><strong>Data de aprovação</strong>${formatDate(order.dataAprovacao)}</span>` : '',
         order.dataRetirada ?`<span><strong>Data de retirada</strong>${formatDate(order.dataRetirada)}</span>` : '',
-        order.retiradoPor ?`<span><strong>Retirado por</strong>${escapeHtml(order.retiradoPor)}</span>` : ''
+        order.retiradoPor ?`<span><strong>Retirado por</strong>${escapeHtml(order.retiradoPor)}</span>` : '',
+        order.documentoRetirada ?`<span><strong>Documento retirada</strong>${escapeHtml(order.documentoRetirada)}</span>` : ''
       ].join('');
       const budgetNotes = order.observacaoOrcamento
         ?`<div class="history-notes">
@@ -658,7 +832,11 @@
           <div class="card-actions">
             <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
             <button class="btn btn-secondary" type="button" data-action="print" data-id="${escapeHtml(order.id)}">Imprimir OS</button>
+            ${receiptButton}
+            ${withdrawalTermButton}
             <a class="btn btn-whatsapp" href="${createWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp</a>
+            ${paymentWhatsApp}
+            ${withdrawalWhatsApp}
             ${sendBudgetAction}
             ${approvalActions}
             ${paidButton}
@@ -751,6 +929,8 @@
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
       if (button.dataset.action === 'print') imprimirOS(order);
+      if (button.dataset.action === 'receipt') imprimirRecibo(order);
+      if (button.dataset.action === 'withdrawal-term') imprimirTermoRetirada(order);
       if (button.dataset.action === 'approve') {
         approveOrder(order);
         renderClients();

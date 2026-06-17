@@ -336,17 +336,21 @@
       currencyForExcel(getOrderRemaining(order)),
       order.statusServico || '',
       order.statusPagamento || '',
+      order.formaPagamento || '',
+      dateForExcel(order.dataPagamento),
+      order.recebidoPor || '',
       dateForExcel(order.dataEntrada),
       dateForExcel(order.previsaoEntrega),
       dateForExcel(order.dataOrcamento),
       order.aprovadoCliente || 'não',
       dateForExcel(order.dataAprovacao),
       dateForExcel(order.dataRetirada),
-      order.retiradoPor || ''
+      order.retiradoPor || '',
+      order.documentoRetirada || ''
     ];
 
     if (includeNotes) {
-      row.push(order.observacoesPeca || '', order.observacaoOrcamento || '', order.observacaoRetirada || '', order.observacoesGerais || '');
+      row.push(order.observacoesPeca || '', order.observacaoOrcamento || '', order.observacaoRetirada || '', order.observacaoPagamento || '', order.observacoesGerais || '');
     }
 
     return row;
@@ -404,6 +408,9 @@
       'Restante',
       'Status do Serviço',
       'Status do Pagamento',
+      'Forma de Pagamento',
+      'Data do Pagamento',
+      'Recebido Por',
       'Data de Entrada',
       'Previsão',
       'Data do Orçamento',
@@ -411,9 +418,11 @@
       'Data de Aprovação',
       'Data de Retirada',
       'Retirado Por',
+      'Documento Retirada',
       'Observações da Peça',
       'Observação do Orçamento',
       'Observação de Retirada',
+      'Observação do Pagamento',
       'Observações Gerais'
     ];
     const rows = orders.map(function (order) {
@@ -448,6 +457,9 @@
       'Restante',
       'Status do Serviço',
       'Status do Pagamento',
+      'Forma de Pagamento',
+      'Data do Pagamento',
+      'Recebido Por',
       'Data de Entrada',
       'Previsão'
     ];
@@ -463,6 +475,9 @@
         currencyForExcel(getOrderRemaining(order)),
         order.statusServico || '',
         order.statusPagamento || '',
+        order.formaPagamento || '',
+        dateForExcel(order.dataPagamento),
+        order.recebidoPor || '',
         dateForExcel(order.dataEntrada),
         dateForExcel(order.previsaoEntrega)
       ];
@@ -496,7 +511,10 @@
       'Valor Total',
       'Entrada',
       'Restante',
-      'Status do Pagamento'
+      'Status do Pagamento',
+      'Forma de Pagamento',
+      'Data do Pagamento',
+      'Recebido Por'
     ];
     const orderRows = orders.map(function (order) {
       return [
@@ -506,7 +524,10 @@
         currencyForExcel(order.valorTotal),
         currencyForExcel(order.valorEntrada),
         currencyForExcel(getOrderRemaining(order)),
-        order.statusPagamento || ''
+        order.statusPagamento || '',
+        order.formaPagamento || '',
+        dateForExcel(order.dataPagamento),
+        order.recebidoPor || ''
       ];
     });
 
@@ -672,6 +693,7 @@
     return RetificaStorage.getOrders().filter(function (order) {
       const remaining = getOrderRemaining(order);
       const hasPendingPayment = order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || remaining > 0;
+      const hasRegisteredPayment = hasReceiptPayment(order);
       const searchableText = [
         getOrderSearchText(order),
         order.cliente,
@@ -680,7 +702,8 @@
       ].join(' ').toLowerCase();
       const searchMatch = !search || searchableText.includes(search);
       const statusMatch = status === 'todos' || order.statusPagamento === status;
-      return hasPendingPayment && searchMatch && statusMatch;
+      const visibilityMatch = status === 'pago' ?order.statusPagamento === 'pago' : hasPendingPayment || hasRegisteredPayment;
+      return visibilityMatch && searchMatch && statusMatch;
     });
   }
 
@@ -698,6 +721,13 @@
       const remaining = getOrderRemaining(order);
       const pendingClass = remaining > 0 ?'has-pending' : '';
       const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
+      const receiptButton = renderReceiptButton(order);
+      const paymentWhatsApp = hasReceiptPayment(order)
+        ?`<a class="btn btn-secondary" href="${createPaymentWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp pagamento</a>`
+        : '';
+      const chargeButton = remaining > 0
+        ?`<a class="btn btn-whatsapp" href="${createChargeLink(order)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`
+        : '';
 
       return `
         <article class="finance-order ${pendingClass}">
@@ -724,10 +754,14 @@
             <span><strong>Valor total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
             <span><strong>Entrada</strong><span class="money-value">${formatCurrency(order.valorEntrada)}</span></span>
             <span class="${remaining > 0 ?'value-pending' : 'value-paid'}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
+            <span><strong>Forma</strong>${escapeHtml(order.formaPagamento || 'Não informada')}</span>
+            <span><strong>Data pagamento</strong>${order.dataPagamento ?formatDate(order.dataPagamento) : 'Não informada'}</span>
           </div>
 
           <div class="card-actions">
-            <a class="btn btn-whatsapp" href="${createChargeLink(order)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>
+            ${chargeButton}
+            ${paymentWhatsApp}
+            ${receiptButton}
             <button class="btn btn-secondary" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>
             <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
           </div>
@@ -747,6 +781,7 @@
       ...order,
       statusPagamento: 'pago',
       valorEntrada: toNumber(order.valorTotal),
+      dataPagamento: order.dataPagamento || RetificaStorage.getTodayIso(),
       valorRestante: 0
     });
     renderFinance();
@@ -755,11 +790,12 @@
 
   if (pendingPayments) {
     pendingPayments.addEventListener('click', function (event) {
-      const button = event.target.closest('button[data-action="paid"]');
+      const button = event.target.closest('button[data-action]');
       if (!button) return;
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
-      markOrderPaid(order);
+      if (button.dataset.action === 'paid') markOrderPaid(order);
+      if (button.dataset.action === 'receipt') imprimirRecibo(order);
     });
   }
 

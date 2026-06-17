@@ -124,6 +124,20 @@
               <option value="pago">Pago</option>
             </select>
           </label>
+          <label>Forma de pagamento
+            <select name="formaPagamento">
+              <option value="">Não informado</option>
+              <option value="dinheiro">Dinheiro</option>
+              <option value="pix">Pix</option>
+              <option value="cartão de débito">Cartão de débito</option>
+              <option value="cartão de crédito">Cartão de crédito</option>
+              <option value="transferência">Transferência</option>
+              <option value="outro">Outro</option>
+            </select>
+          </label>
+          <label>Data do pagamento<input name="dataPagamento" type="date"></label>
+          <label>Recebido por<input name="recebidoPor" type="text"></label>
+          <label class="full-width">Observação do pagamento<textarea name="observacaoPagamento" rows="3"></textarea></label>
         </div>
       </section>
 
@@ -135,6 +149,7 @@
         <div class="form-grid">
           <label>Data de retirada<input name="dataRetirada" type="date"></label>
           <label>Retirado por<input name="retiradoPor" type="text"></label>
+          <label>Documento de quem retirou<input name="documentoRetirada" type="text"></label>
           <label class="full-width">Observação de retirada<textarea name="observacaoRetirada" rows="3"></textarea></label>
         </div>
       </section>

@@ -216,6 +216,235 @@ function getOrderRemaining(order) {
   return RetificaStorage.calculateRemaining(order);
 }
 
+function getReceiptPaidAmount(order) {
+  const total = Number(order && order.valorTotal || 0);
+  const entrada = Number(order && order.valorEntrada || 0);
+  const safeTotal = Number.isFinite(total) ?total : 0;
+  const safeEntrada = Number.isFinite(entrada) ?entrada : 0;
+  if (order && order.statusPagamento === 'pago') return safeTotal;
+  return Math.min(safeEntrada, safeTotal);
+}
+
+function hasReceiptPayment(order) {
+  return getReceiptPaidAmount(order) > 0;
+}
+
+function canGenerateReceipt(order) {
+  if (!order) return false;
+  return order.statusPagamento === 'pago'
+    || order.statusPagamento === 'parcial'
+    || Number(order.valorEntrada || 0) > 0;
+}
+
+function renderReceiptButton(order, extraClass) {
+  const classes = ['btn', 'btn-receipt', extraClass || ''].filter(Boolean).join(' ');
+  if (canGenerateReceipt(order)) {
+    return `<button class="${classes}" type="button" data-action="receipt" data-id="${escapeHtml(order.id)}">Recibo</button>`;
+  }
+  return '<button class="' + classes + '" type="button" disabled title="Registre um pagamento para gerar recibo">Recibo</button>';
+}
+
+function canGenerateWithdrawalTerm(order) {
+  return Boolean(order && (order.statusServico === 'entregue' || order.dataRetirada));
+}
+
+function renderWithdrawalTermButton(order) {
+  if (canGenerateWithdrawalTerm(order)) {
+    return `<button class="btn btn-withdrawal-term" type="button" data-action="withdrawal-term" data-id="${escapeHtml(order.id)}">Termo de retirada</button>`;
+  }
+  return '<button class="btn btn-withdrawal-term" type="button" disabled title="Marque a OS como entregue para gerar o termo de retirada">Termo de retirada</button>';
+}
+
+function getPhoneForWhatsApp(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.startsWith('55') ?digits : `55${digits}`;
+}
+
+function createPaymentWhatsAppLink(order) {
+  const phone = getPhoneForWhatsApp(order && order.telefone);
+  const companyName = getCompanySignature();
+  const paidAmount = getReceiptPaidAmount(order);
+  const message = [
+    `Olá, ${order && order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
+    `Registramos o pagamento referente à OS nº ${order && order.numeroOs}.`,
+    `Valor pago: ${formatCurrency(paidAmount)}.`,
+    `Status do pagamento: ${order && order.statusPagamento || 'pendente'}.`,
+    'Obrigado.'
+  ].join(' ');
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function createWithdrawalWhatsAppLink(order) {
+  const phone = getPhoneForWhatsApp(order && order.telefone);
+  const companyName = getCompanySignature();
+  const retirada = order && order.dataRetirada ?formatDate(order.dataRetirada) : formatDate(RetificaStorage.getTodayIso());
+  const message = [
+    `Olá, ${order && order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
+    `Sua peça referente à OS nº ${order && order.numeroOs} foi registrada como entregue/retirada em ${retirada}.`,
+    'Obrigado pela preferência.'
+  ].join(' ');
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function imprimirTermoRetirada(order) {
+  if (!canGenerateWithdrawalTerm(order)) {
+    alert('Marque a OS como entregue para gerar o termo de retirada.');
+    return false;
+  }
+
+  const company = getCompanySettings();
+  const companyLines = [company.nome, company.telefone, company.endereco, company.cidadeUf, company.cnpj ?`CNPJ: ${company.cnpj}` : '', company.email]
+    .filter(Boolean)
+    .map(function (line) { return `<p>${escapeHtml(line)}</p>`; })
+    .join('');
+  const optionalItem = function (label, value) {
+    return value ?`<div class="item"><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</div>` : '';
+  };
+  const optionalNote = order.observacaoRetirada
+    ?`<h2>Observação de retirada</h2><div class="notes">${escapeHtml(order.observacaoRetirada)}</div>`
+    : '';
+  const styles = [
+    'body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.35; margin: 0; }',
+    '.term-page, .termo-page { width: 100%; max-width: 190mm; margin: 0 auto; }',
+    'header { border-bottom: 2px solid #111; margin-bottom: 14px; padding-bottom: 10px; }',
+    'header h1 { font-size: 20px; margin: 0 0 6px; }',
+    'header p { margin: 2px 0; }',
+    'h1.term-title { font-size: 22px; text-align: center; margin: 12px 0 16px; text-transform: uppercase; }',
+    'h2, h3 { border-bottom: 1px solid #bbb; font-size: 14px; margin: 8px 0 6px; padding-bottom: 3px; }',
+    '.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }',
+    '.item { font-size: 12px; }',
+    '.item strong { display: block; color: #444; font-size: 10px; text-transform: uppercase; }',
+    '.declaration { border: 1px solid #000; margin: 12px 0 0; padding: 10px; font-size: 12px; line-height: 1.35; text-align: justify; }',
+    '.notes { border: 1px solid #bbb; padding: 6px; white-space: pre-wrap; }',
+    '.signatures, .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; break-inside: avoid; page-break-inside: avoid; }',
+    '.signature, .assinatura-linha { border-top: 1px solid #000; padding-top: 5px; text-align: center; font-size: 11px; }',
+    '@page { size: A4 portrait; margin: 7mm; }',
+    '@media print { body { background: #fff !important; color: #000 !important; } .term-page, .termo-page { width: 100%; max-width: 190mm; } }'
+  ].join('');
+  const html = `
+    <main class="term-page termo-page">
+      <header>
+        <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
+        ${companyLines}
+      </header>
+      <h1 class="term-title">Termo de Retirada de Peça</h1>
+      <section class="grid">
+        <div class="item"><strong>OS</strong>${escapeHtml(order.numeroOs)}</div>
+        <div class="item"><strong>Cliente</strong>${escapeHtml(order.cliente || 'Não informado')}</div>
+        <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
+        <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
+        <div class="item"><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</div>
+        <div class="item"><strong>Serviço realizado</strong>${escapeHtml(order.tipoServico || 'Não informado')}</div>
+        <div class="item"><strong>Status do serviço</strong>${escapeHtml(order.statusServico || 'Não informado')}</div>
+        <div class="item"><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</div>
+        <div class="item"><strong>Data de retirada</strong>${formatDate(order.dataRetirada)}</div>
+        ${optionalItem('Retirado por', order.retiradoPor)}
+        ${optionalItem('Documento de quem retirou', order.documentoRetirada)}
+      </section>
+      ${optionalNote}
+      <p class="declaration">Declaro que recebi a peça/serviço referente à Ordem de Serviço acima, estando ciente das informações registradas neste documento.</p>
+      <section class="signatures">
+        <div class="signature">Assinatura de quem retirou</div>
+        <div class="signature">Assinatura da empresa</div>
+      </section>
+    </main>
+  `;
+
+  return safePrint(html, {
+    title: `Termo de retirada OS ${order.numeroOs}`,
+    styles,
+    width: 820,
+    height: 700
+  });
+}
+
+function imprimirRecibo(order) {
+  const paidAmount = getReceiptPaidAmount(order);
+  if (paidAmount <= 0) {
+    alert('Não há pagamento registrado para gerar recibo.');
+    return false;
+  }
+
+  const company = getCompanySettings();
+  const companyLines = [company.nome, company.telefone, company.endereco, company.cidadeUf, company.cnpj ?`CNPJ: ${company.cnpj}` : '', company.email]
+    .filter(Boolean)
+    .map(function (line) { return `<p>${escapeHtml(line)}</p>`; })
+    .join('');
+  const optionalItem = function (label, value) {
+    return value ?`<div class="item"><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</div>` : '';
+  };
+  const optionalDateItem = function (label, value) {
+    return value ?optionalItem(label, formatDate(value)) : '';
+  };
+  const optionalNote = order.observacaoPagamento
+    ?`<h2>Observação do pagamento</h2><div class="notes">${escapeHtml(order.observacaoPagamento)}</div>`
+    : '';
+  const styles = [
+    'body { background: #fff; color: #000; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.35; margin: 0; }',
+    '.receipt-page { width: 100%; max-width: 190mm; margin: 0 auto; }',
+    'header { border-bottom: 2px solid #111; margin-bottom: 14px; padding-bottom: 10px; }',
+    'header h1 { font-size: 20px; margin: 0 0 6px; text-align: left; }',
+    'header p { margin: 2px 0; }',
+    'h1.receipt-title { font-size: 22px; text-align: center; margin: 10px 0 14px; text-transform: uppercase; }',
+    'h2, h3 { border-bottom: 1px solid #bbb; font-size: 14px; margin: 8px 0 6px; padding-bottom: 3px; }',
+    '.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 20px; }',
+    '.item { font-size: 12px; }',
+    '.item strong { display: block; color: #444; font-size: 9px; text-transform: uppercase; }',
+    '.valor-pago-destaque { border: 1px solid #000; margin: 14px 0; padding: 10px; text-align: center; }',
+    '.valor-pago-destaque span { display: block; color: #444; font-size: 10px; font-weight: bold; text-transform: uppercase; }',
+    '.valor-pago-destaque strong { display: block; font-size: 22px; font-weight: bold; margin-top: 4px; }',
+    '.notes { border: 1px solid #bbb; padding: 6px; white-space: pre-wrap; }',
+    '.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; break-inside: avoid; page-break-inside: avoid; }',
+    '.signature { border-top: 1px solid #000; padding-top: 5px; text-align: center; }',
+    '@page { size: A4 portrait; margin: 10mm; }',
+    '@media print { body { background: #fff !important; color: #000 !important; } .receipt-page { width: 100%; max-width: 190mm; } }'
+  ].join('');
+  const html = `
+    <main class="receipt-page">
+      <header>
+        <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
+        ${companyLines}
+      </header>
+      <h1 class="receipt-title">Recibo de Pagamento</h1>
+      <section class="grid">
+        <div class="item"><strong>OS</strong>${escapeHtml(order.numeroOs)}</div>
+        <div class="item"><strong>Data de emissão</strong>${escapeHtml(new Date().toLocaleDateString('pt-BR'))}</div>
+        <div class="item"><strong>Cliente</strong>${escapeHtml(order.cliente || 'Não informado')}</div>
+        <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
+        <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
+        <div class="item"><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</div>
+        <div class="item"><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</div>
+        <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'pendente')}</div>
+      </section>
+      <div class="valor-pago-destaque"><span>Valor pago</span><strong>${formatCurrency(paidAmount)}</strong></div>
+      <h2>Valores</h2>
+      <section class="grid">
+        <div class="item"><strong>Valor total</strong>${formatCurrency(order.valorTotal)}</div>
+        <div class="item"><strong>Entrada</strong>${formatCurrency(order.valorEntrada)}</div>
+        <div class="item"><strong>Restante</strong>${formatCurrency(getOrderRemaining(order))}</div>
+        ${optionalItem('Forma de pagamento', order.formaPagamento)}
+        ${optionalDateItem('Data do pagamento', order.dataPagamento)}
+        ${optionalItem('Recebido por', order.recebidoPor)}
+      </section>
+      ${optionalNote}
+      <section class="signatures">
+        <div class="signature">Assinatura da empresa</div>
+        <div class="signature">Assinatura do cliente</div>
+      </section>
+    </main>
+  `;
+
+  return safePrint(html, {
+    title: `Recibo OS ${order.numeroOs}`,
+    styles,
+    width: 820,
+    height: 700
+  });
+}
+
 function isOrderLate(order) {
   if (!order.previsaoEntrega || order.statusServico === 'entregue') return false;
   const today = new Date();
