@@ -46,6 +46,7 @@
           <option value="em execução">Em execução</option>
           <option value="finalizado">Finalizado</option>
           <option value="entregue">Entregue</option>
+          <option value="atrasadas">Atrasadas</option>
         </select>
       </label>
       <label>Pagamento
@@ -54,8 +55,30 @@
           <option value="pendente">Pendente</option>
           <option value="parcial">Parcial</option>
           <option value="pago">Pago</option>
+          <option value="sem cobrança">Sem cobrança</option>
         </select>
       </label>
+      <label>Ordenar por
+        <select id="serviceSort">
+          <option value="recentes">Mais recentes</option>
+          <option value="antigas">Mais antigas</option>
+          <option value="maior-valor">Maior valor</option>
+          <option value="maior-pendencia">Maior pendência</option>
+          <option value="previsao-proxima">Previsão mais próxima</option>
+          <option value="atrasadas-primeiro">Atrasadas primeiro</option>
+          <option value="os-crescente">Número da OS crescente</option>
+          <option value="os-decrescente">Número da OS decrescente</option>
+        </select>
+      </label>
+      <div class="quick-filter-row" aria-label="Filtros rápidos">
+        <button class="quick-filter-chip" type="button" data-quick-filter="aberto">Em aberto</button>
+        <button class="quick-filter-chip" type="button" data-quick-filter="aguardando">Aguardando aprovação</button>
+        <button class="quick-filter-chip" type="button" data-quick-filter="atrasadas">Atrasadas</button>
+        <button class="quick-filter-chip" type="button" data-quick-filter="pendencia">Com pendência</button>
+        <button class="quick-filter-chip" type="button" data-quick-filter="entregues">Entregues</button>
+        <button class="quick-filter-chip" type="button" data-quick-filter="sem-cobranca">Sem cobrança</button>
+      </div>
+      <p class="results-count" id="ordersResultCount" aria-live="polite">0 ordens encontradas</p>
     </section>
 
     <section id="ordersList" class="orders-grid"></section>

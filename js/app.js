@@ -182,6 +182,7 @@ function safePrint(htmlContent, options) {
 function paymentBadgeClass(status) {
   if (status === 'pago') return 'success';
   if (status === 'parcial') return 'warning';
+  if (status === 'sem cobrança') return 'info';
   return 'danger';
 }
 
@@ -190,7 +191,16 @@ function isOrderRejected(order) {
 }
 
 function isWorkInProgress(order) {
-  return Boolean(order && !['finalizado', 'entregue', 'recusado'].includes(order.statusServico));
+  return Boolean(order && ['recebido', 'em análise', 'aprovado', 'em execução'].includes(order.statusServico));
+}
+
+function isOrderFinanciallyRelevant(order) {
+  if (!order) return false;
+  if (order.statusPagamento === 'sem cobrança') return false;
+  return Number(order.valorTotal || 0) > 0
+    || Number(order.valorEntrada || 0) > 0
+    || getOrderReceived(order) > 0
+    || getOrderRemaining(order) > 0;
 }
 
 function serviceBadgeClass(status) {
@@ -209,7 +219,9 @@ function getOrderReceived(order) {
   const entryValue = Number(order.valorEntrada || 0);
   const total = Number.isFinite(totalValue) ?totalValue : 0;
   const entrada = Number.isFinite(entryValue) ?entryValue : 0;
-  return order.statusPagamento === 'pago' ?total : Math.min(entrada, total);
+  if (order.statusPagamento === 'sem cobrança') return 0;
+  if (order.statusPagamento === 'pago') return total;
+  return total > 0 ?Math.min(entrada, total) : entrada;
 }
 
 function getOrderRemaining(order) {
@@ -222,6 +234,7 @@ function getReceiptPaidAmount(order) {
   const safeTotal = Number.isFinite(total) ?total : 0;
   const safeEntrada = Number.isFinite(entrada) ?entrada : 0;
   if (order && order.statusPagamento === 'pago') return safeTotal;
+  if (order && order.statusPagamento === 'sem cobrança') return 0;
   return Math.min(safeEntrada, safeTotal);
 }
 
@@ -231,6 +244,7 @@ function hasReceiptPayment(order) {
 
 function canGenerateReceipt(order) {
   if (!order) return false;
+  if (order.statusPagamento === 'sem cobrança') return false;
   return order.statusPagamento === 'pago'
     || order.statusPagamento === 'parcial'
     || Number(order.valorEntrada || 0) > 0;
@@ -241,7 +255,10 @@ function renderReceiptButton(order, extraClass) {
   if (canGenerateReceipt(order)) {
     return `<button class="${classes}" type="button" data-action="receipt" data-id="${escapeHtml(order.id)}">Recibo</button>`;
   }
-  return '<button class="' + classes + '" type="button" disabled title="Registre um pagamento para gerar recibo">Recibo</button>';
+  const title = order && order.statusPagamento === 'sem cobrança'
+    ?'Esta OS não possui cobrança registrada'
+    :'Registre um pagamento para gerar recibo';
+  return '<button class="' + classes + '" type="button" disabled title="' + title + '">Recibo</button>';
 }
 
 function canGenerateWithdrawalTerm(order) {
@@ -364,7 +381,9 @@ function imprimirTermoRetirada(order) {
 function imprimirRecibo(order) {
   const paidAmount = getReceiptPaidAmount(order);
   if (paidAmount <= 0) {
-    alert('Não há pagamento registrado para gerar recibo.');
+    alert(order && order.statusPagamento === 'sem cobrança'
+      ?'Esta OS não possui cobrança registrada.'
+      :'Não há pagamento registrado para gerar recibo.');
     return false;
   }
 
@@ -446,7 +465,7 @@ function imprimirRecibo(order) {
 }
 
 function isOrderLate(order) {
-  if (!order.previsaoEntrega || order.statusServico === 'entregue') return false;
+  if (!order.previsaoEntrega || ['entregue', 'finalizado', 'recusado'].includes(order.statusServico)) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dueDate = new Date(order.previsaoEntrega + 'T00:00:00');
@@ -459,21 +478,25 @@ function calculateTotals(orders) {
     const totalValue = Number(order.valorTotal || 0);
     const total = Number.isFinite(totalValue) ?totalValue : 0;
     const recebido = getOrderReceived(order);
+    const restante = getOrderRemaining(order);
+    const financialRelevant = isOrderFinanciallyRelevant(order);
 
     acc.totalOrdens += 1;
-    acc.totalServicos += total;
+    acc.totalServicos += financialRelevant ?total : 0;
     acc.recebido += recebido;
-    acc.pendente += getOrderRemaining(order);
+    acc.pendente += restante;
     if (order.statusServico === 'orçamento') acc.orcamento += 1;
     if (order.statusServico === 'aguardando aprovação') acc.aguardandoAprovacao += 1;
     if (order.statusServico === 'aprovado') acc.aprovadas += 1;
     if (order.statusServico === 'recusado') acc.recusadas += 1;
     if (order.statusServico === 'recebido') acc.recebidas += 1;
+    if (order.statusServico === 'em análise') acc.emAnalise += 1;
     if (order.statusServico === 'em execução') acc.emExecucao += 1;
     if (order.statusServico === 'finalizado') acc.finalizadas += 1;
     if (order.statusServico === 'entregue') acc.entregues += 1;
+    if (order.statusPagamento === 'sem cobrança') acc.semCobranca += 1;
     if (isWorkInProgress(order)) acc.andamento += 1;
-    if (order.statusPagamento !== 'pago') acc.pagamentoPendente += 1;
+    if (restante > 0) acc.pagamentoPendente += 1;
     return acc;
   }, {
     totalOrdens: 0,
@@ -482,11 +505,13 @@ function calculateTotals(orders) {
     aprovadas: 0,
     recusadas: 0,
     recebidas: 0,
+    emAnalise: 0,
     emExecucao: 0,
     andamento: 0,
     finalizadas: 0,
     entregues: 0,
     pagamentoPendente: 0,
+    semCobranca: 0,
     recebido: 0,
     pendente: 0,
     totalServicos: 0

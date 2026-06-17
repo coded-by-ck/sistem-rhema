@@ -51,8 +51,14 @@
   function calculateRemaining(order) {
     const total = safeNumber(order.valorTotal);
     const entrada = safeNumber(order.valorEntrada);
-    if (order.statusPagamento === 'pago') return 0;
+    if (order.statusPagamento === 'pago' || order.statusPagamento === 'sem cobrança') return 0;
     return Math.max(total - entrada, 0);
+  }
+
+  function normalizePaymentStatus(status, statusServico, total, entrada) {
+    const value = String(status || 'pendente').trim().toLowerCase();
+    if (statusServico === 'recusado' && total === 0 && entrada === 0) return 'sem cobrança';
+    return ['pendente', 'parcial', 'pago', 'sem cobrança'].includes(value) ?value : 'pendente';
   }
 
   function normalizeApprovalValue(value) {
@@ -89,15 +95,19 @@
   function normalizeOrder(order, index) {
     const dataEntrada = order.dataEntrada || (order.criadoEm ?order.criadoEm.slice(0, 10) : todayIso());
     const statusServico = normalizeServiceStatus(order.statusServico);
+    const valorTotal = safeNumber(order.valorTotal);
+    const valorEntrada = safeNumber(order.valorEntrada);
+    const statusPagamento = normalizePaymentStatus(order.statusPagamento, statusServico, valorTotal, valorEntrada);
     const dataRetirada = statusServico === 'entregue' ?(order.dataRetirada || todayIso()) : (order.dataRetirada || '');
     const normalized = {
       ...order,
       numeroOs: orderNumberFromValue(order.numeroOs, index),
       dataEntrada,
-      valorTotal: safeNumber(order.valorTotal),
-      valorEntrada: safeNumber(order.valorEntrada),
+      valorTotal,
+      valorEntrada,
+      statusPagamento,
       formaPagamento: order.formaPagamento || '',
-      dataPagamento: order.statusPagamento === 'pago' ?(order.dataPagamento || todayIso()) : (order.dataPagamento || ''),
+      dataPagamento: statusPagamento === 'pago' ?(order.dataPagamento || todayIso()) : (order.dataPagamento || ''),
       recebidoPor: order.recebidoPor || '',
       observacaoPagamento: order.observacaoPagamento || '',
       valorOrcado: safeNumber(order.valorOrcado),
@@ -346,11 +356,36 @@
           dataOrcamento: addDaysIso(-5),
           aprovadoCliente: 'não',
           statusServico: 'recusado',
-          statusPagamento: 'pendente',
+          statusPagamento: 'sem cobrança',
           dataEntrada: addDaysIso(-6),
           previsaoEntrega: addDaysIso(-1),
           observacoesPeca: 'Serviço finalizado e aguardando retirada.',
           observacoesGerais: 'Conferir nota no balcão.'
+        },
+        {
+          id: 'demo-os-007',
+          cliente: 'Garage Prime',
+          telefone: '(11) 93333-7070',
+          carro: 'HB20',
+          ano: '2018',
+          motor: '1.6',
+          peca: 'Cabeçote HB20 1.6',
+          tipoServico: 'Teste de pressão e plaina',
+          valorTotal: 540,
+          valorEntrada: 540,
+          valorOrcado: 540,
+          dataOrcamento: addDaysIso(-6),
+          aprovadoCliente: 'sim',
+          dataAprovacao: addDaysIso(-5),
+          statusServico: 'finalizado',
+          statusPagamento: 'pago',
+          formaPagamento: 'transferência',
+          dataPagamento: addDaysIso(-4),
+          recebidoPor: 'Atendimento',
+          dataEntrada: addDaysIso(-7),
+          previsaoEntrega: addDaysIso(-3),
+          observacoesPeca: 'Serviço finalizado aguardando retirada do cliente.',
+          observacoesGerais: 'Aviso de conclusão enviado por WhatsApp.'
         },
         {
           id: 'demo-os-005',

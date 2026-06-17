@@ -36,8 +36,6 @@
           <h2>Dados do cliente</h2>
         </div>
         <div class="form-grid">
-          <label>Número da OS<input id="numeroOs" name="numeroOs" type="text" readonly></label>
-          <label>Data de entrada<input id="dataEntrada" name="dataEntrada" type="date" readonly></label>
           <label>Nome do cliente<input name="cliente" type="text" required></label>
           <label>Telefone<input name="telefone" type="tel" placeholder="(00) 00000-0000" required></label>
         </div>
@@ -46,32 +44,25 @@
       <section class="form-section">
         <div class="form-section-title">
           <span>02</span>
-          <h2>Dados do veículo</h2>
+          <h2>Dados do veículo e peça</h2>
         </div>
         <div class="form-grid">
           <label>Carro<input name="carro" type="text" required></label>
           <label>Ano<input name="ano" type="number" min="1900" max="2100"></label>
-          <label class="full-width">Motor<input name="motor" type="text"></label>
+          <label>Motor<input name="motor" type="text"></label>
+          <label>Peça/Cabeçote<input name="peca" type="text" required></label>
         </div>
       </section>
 
       <section class="form-section">
         <div class="form-section-title">
           <span>03</span>
-          <h2>Dados da peça</h2>
-        </div>
-        <div class="form-grid">
-          <label>Peça/Cabeçote<input name="peca" type="text" required></label>
-          <label>Tipo de serviço<input name="tipoServico" type="text" placeholder="Plainar, solda, teste..." required></label>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-title">
-          <span>04</span>
           <h2>Serviço</h2>
         </div>
         <div class="form-grid">
+          <label>Número da OS<input id="numeroOs" name="numeroOs" type="text" readonly></label>
+          <label>Data de entrada<input id="dataEntrada" name="dataEntrada" type="date" readonly></label>
+          <label>Tipo de serviço<input name="tipoServico" type="text" placeholder="Plainar, solda, teste..." required></label>
           <label>Status do serviço
             <select name="statusServico">
               <option value="orçamento">Orçamento</option>
@@ -91,7 +82,7 @@
 
       <section class="form-section">
         <div class="form-section-title">
-          <span>05</span>
+          <span>04</span>
           <h2>Orçamento e aprovação</h2>
         </div>
         <div class="form-grid">
@@ -110,7 +101,7 @@
 
       <section class="form-section">
         <div class="form-section-title">
-          <span>06</span>
+          <span>05</span>
           <h2>Pagamento</h2>
         </div>
         <div class="form-grid">
@@ -122,6 +113,7 @@
               <option value="pendente">Pendente</option>
               <option value="parcial">Parcial</option>
               <option value="pago">Pago</option>
+              <option value="sem cobrança">Sem cobrança</option>
             </select>
           </label>
           <label>Forma de pagamento
@@ -143,8 +135,8 @@
 
       <section class="form-section">
         <div class="form-section-title">
-          <span>07</span>
-          <h2>Retirada da peça</h2>
+          <span>06</span>
+          <h2>Retirada</h2>
         </div>
         <div class="form-grid">
           <label>Data de retirada<input name="dataRetirada" type="date"></label>
@@ -156,7 +148,7 @@
 
       <section class="form-section">
         <div class="form-section-title">
-          <span>08</span>
+          <span>07</span>
           <h2>Observações</h2>
         </div>
         <div class="form-grid">
@@ -166,7 +158,7 @@
       </section>
 
       <div class="form-actions sticky-actions">
-        <button class="btn btn-primary" type="submit" id="submitButton">Salvar ordem</button>
+        <button class="btn btn-primary" type="submit" id="submitButton">Cadastrar OS</button>
         <a class="btn btn-secondary" href="servicos.html">Ver serviços</a>
       </div>
     </form>

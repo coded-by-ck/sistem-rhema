@@ -4,6 +4,9 @@
   const serviceSearch = document.getElementById('serviceSearch');
   const statusFilter = document.getElementById('statusFilter');
   const paymentFilter = document.getElementById('paymentFilter');
+  const serviceSort = document.getElementById('serviceSort');
+  const ordersResultCount = document.getElementById('ordersResultCount');
+  const quickFilterButtons = document.querySelectorAll('[data-quick-filter]');
   const clientSearch = document.getElementById('clientSearch');
   const clientMetrics = document.getElementById('clientMetrics');
   const clientsList = document.getElementById('clientsList');
@@ -12,6 +15,7 @@
   const editId = params.get('id') || params.get('edit');
   let selectedClientKey = '';
   let openOrderId = '';
+  let activeQuickFilter = '';
 
   function toNumber(value) {
     const number = Number(value || 0);
@@ -52,13 +56,19 @@
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   }
 
+  function shouldUseNoChargeStatus(statusServico, valorTotal, valorEntrada) {
+    return statusServico === 'recusado' && toNumber(valorTotal) === 0 && toNumber(valorEntrada) === 0;
+  }
+
   function collectOrderFromForm(existingOrder) {
     // Geração de OS: normaliza campos do formulário antes de salvar no localStorage.
     const data = new FormData(form);
     const valorTotal = toNumber(data.get('valorTotal'));
     const valorEntrada = Math.min(toNumber(data.get('valorEntrada')), valorTotal);
-    const statusPagamento = data.get('statusPagamento');
     const statusServico = data.get('statusServico');
+    const statusPagamento = shouldUseNoChargeStatus(statusServico, valorTotal, valorEntrada)
+      ?'sem cobrança'
+      : data.get('statusPagamento');
     const approvedByStatus = statusServico === 'aprovado' || statusServico === 'em execução' || statusServico === 'finalizado' || statusServico === 'entregue';
     const aprovadoCliente = approvedByStatus ?'sim' : (data.get('aprovadoCliente') || 'não');
     const dataAprovacao = aprovadoCliente === 'sim'
@@ -85,7 +95,7 @@
       tipoServico: String(data.get('tipoServico') || '').trim(),
       valorTotal,
       valorEntrada,
-      valorRestante: statusPagamento === 'pago' ?0 : Math.max(valorTotal - valorEntrada, 0),
+      valorRestante: statusPagamento === 'pago' || statusPagamento === 'sem cobrança' ?0 : Math.max(valorTotal - valorEntrada, 0),
       statusServico,
       statusPagamento,
       formaPagamento: data.get('formaPagamento') || '',
@@ -112,8 +122,13 @@
     if (!form) return;
     const valorTotal = toNumber(form.valorTotal.value);
     const valorEntrada = toNumber(form.valorEntrada.value);
+    if (shouldUseNoChargeStatus(form.statusServico.value, valorTotal, valorEntrada)) {
+      form.statusPagamento.value = 'sem cobrança';
+    } else if (form.statusPagamento.value === 'sem cobrança') {
+      form.statusPagamento.value = 'pendente';
+    }
     const statusPagamento = form.statusPagamento.value;
-    const remaining = statusPagamento === 'pago' ?0 : Math.max(valorTotal - valorEntrada, 0);
+    const remaining = statusPagamento === 'pago' || statusPagamento === 'sem cobrança' ?0 : Math.max(valorTotal - valorEntrada, 0);
     document.getElementById('valorRestante').value = formatCurrency(remaining);
   }
 
@@ -184,6 +199,7 @@
         form.aprovadoCliente.value = 'sim';
         if (!form.dataAprovacao.value) form.dataAprovacao.value = RetificaStorage.getTodayIso();
       }
+      updateRemainingPreview();
     });
     form.statusPagamento.addEventListener('change', function () {
       if (form.statusPagamento.value === 'pago' && !form.dataPagamento.value) {
@@ -381,6 +397,55 @@
     return ['orçamento', 'aguardando aprovação'].includes(order.statusServico);
   }
 
+  function getOrderNumberValue(order) {
+    const matches = String(order.numeroOs || '').match(/\d+/g);
+    const number = Number(matches ?matches.join('') : 0);
+    return Number.isFinite(number) ?number : 0;
+  }
+
+  function getDateValue(value, fallback) {
+    if (!value) return fallback;
+    const time = new Date(value + 'T00:00:00').getTime();
+    return Number.isFinite(time) ?time : fallback;
+  }
+
+  function orderMatchesQuickFilter(order) {
+    if (!activeQuickFilter) return true;
+    const remaining = getOrderRemaining(order);
+    if (activeQuickFilter === 'aberto') return isWorkInProgress(order);
+    if (activeQuickFilter === 'aguardando') return order.statusServico === 'aguardando aprovação';
+    if (activeQuickFilter === 'atrasadas') return isOrderLate(order);
+    if (activeQuickFilter === 'pendencia') return remaining > 0 && !['pago', 'sem cobrança'].includes(order.statusPagamento);
+    if (activeQuickFilter === 'entregues') return order.statusServico === 'entregue';
+    if (activeQuickFilter === 'sem-cobranca') return order.statusPagamento === 'sem cobrança';
+    return true;
+  }
+
+  function sortOrders(orders) {
+    const sortValue = serviceSort ?serviceSort.value : 'recentes';
+    const sorted = orders.slice();
+    sorted.sort(function (a, b) {
+      if (sortValue === 'antigas') return getDateValue(a.dataEntrada, 0) - getDateValue(b.dataEntrada, 0);
+      if (sortValue === 'maior-valor') return toNumber(b.valorTotal) - toNumber(a.valorTotal);
+      if (sortValue === 'maior-pendencia') return getOrderRemaining(b) - getOrderRemaining(a);
+      if (sortValue === 'previsao-proxima') return getDateValue(a.previsaoEntrega, Number.MAX_SAFE_INTEGER) - getDateValue(b.previsaoEntrega, Number.MAX_SAFE_INTEGER);
+      if (sortValue === 'atrasadas-primeiro') {
+        const lateDiff = Number(isOrderLate(b)) - Number(isOrderLate(a));
+        return lateDiff || getDateValue(a.previsaoEntrega, Number.MAX_SAFE_INTEGER) - getDateValue(b.previsaoEntrega, Number.MAX_SAFE_INTEGER);
+      }
+      if (sortValue === 'os-crescente') return getOrderNumberValue(a) - getOrderNumberValue(b);
+      if (sortValue === 'os-decrescente') return getOrderNumberValue(b) - getOrderNumberValue(a);
+      return getDateValue(b.dataEntrada, 0) - getDateValue(a.dataEntrada, 0);
+    });
+    return sorted;
+  }
+
+  function updateQuickFilterState() {
+    quickFilterButtons.forEach(function (button) {
+      button.classList.toggle('is-active', button.dataset.quickFilter === activeQuickFilter);
+    });
+  }
+
   function detailItem(label, value) {
     return value ?`<span><strong>${escapeHtml(label)}</strong>${escapeHtml(value)}</span>` : '';
   }
@@ -570,24 +635,31 @@
   function renderOrders() {
     if (!list) return;
     const search = serviceSearch ?serviceSearch.value.trim().toLowerCase() : '';
-    const selectedStatus = statusFilter.value;
-    const selectedPayment = paymentFilter.value;
+    const selectedStatus = statusFilter ?statusFilter.value : 'todos';
+    const selectedPayment = paymentFilter ?paymentFilter.value : 'todos';
     const allOrders = RetificaStorage.getOrders();
-    const orders = allOrders.filter(function (order) {
+    const filteredOrders = allOrders.filter(function (order) {
       const searchableText = [getOrderSearchText(order), order.cliente, order.telefone, order.carro, order.peca, order.tipoServico].join(' ').toLowerCase();
       const searchMatch = !search || searchableText.includes(search);
-      const statusMatch = selectedStatus === 'todos' || order.statusServico === selectedStatus;
+      const statusMatch = selectedStatus === 'todos'
+        || (selectedStatus === 'atrasadas' ?isOrderLate(order) : order.statusServico === selectedStatus);
       const paymentMatch = selectedPayment === 'todos' || order.statusPagamento === selectedPayment;
-      return searchMatch && statusMatch && paymentMatch;
+      return searchMatch && statusMatch && paymentMatch && orderMatchesQuickFilter(order);
     });
+    const orders = sortOrders(filteredOrders);
 
     if (openOrderId && !orders.some(function (order) { return order.id === openOrderId; })) {
       openOrderId = '';
     }
 
+    if (ordersResultCount) {
+      ordersResultCount.textContent = `${orders.length} ${orders.length === 1 ?'ordem encontrada' : 'ordens encontradas'}`;
+    }
+    updateQuickFilterState();
+
     list.innerHTML = orders.length
       ?orders.map(renderOrderCard).join('')
-      : '<div class="empty-state">Nenhuma ordem de serviço encontrada.</div>';
+      : '<div class="empty-state">Nenhuma ordem encontrada para os filtros selecionados.</div>';
   }
 
   function updateOrderStatus(order, status) {
@@ -677,7 +749,7 @@
         return String(b.dataEntrada || '').localeCompare(String(a.dataEntrada || ''));
       });
       client.totalGasto = client.ordens.reduce(function (sum, order) {
-        return sum + toNumber(order.valorTotal);
+        return sum + (isOrderFinanciallyRelevant(order) ?toNumber(order.valorTotal) : 0);
       }, 0);
       client.valorPendente = client.ordens.reduce(function (sum, order) {
         return sum + getOrderRemaining(order);
@@ -756,7 +828,7 @@
         ?`<button class="btn btn-secondary" type="button" data-action="approve" data-id="${escapeHtml(order.id)}">Marcar como aprovado</button>
           <button class="btn btn-danger" type="button" data-action="reject" data-id="${escapeHtml(order.id)}">Marcar como recusado</button>`
         : '';
-      const paidButton = remaining > 0 || order.statusPagamento !== 'pago'
+      const paidButton = order.statusPagamento !== 'sem cobrança' && (remaining > 0 || order.statusPagamento !== 'pago')
         ?`<button class="btn btn-mini btn-mini-success" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>`
         : '';
       const paymentWhatsApp = hasReceiptPayment(order)
@@ -953,6 +1025,13 @@
     if (serviceSearch) serviceSearch.addEventListener('input', renderOrders);
     statusFilter.addEventListener('change', renderOrders);
     paymentFilter.addEventListener('change', renderOrders);
+    if (serviceSort) serviceSort.addEventListener('change', renderOrders);
+    quickFilterButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        activeQuickFilter = activeQuickFilter === button.dataset.quickFilter ?'' : button.dataset.quickFilter;
+        renderOrders();
+      });
+    });
     renderOrders();
   }
 

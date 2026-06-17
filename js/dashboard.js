@@ -20,9 +20,12 @@
 
     const cards = [
       ['Total de ordens', totals.totalOrdens, ''],
+      ['Em orçamento', totals.orcamento, totals.orcamento > 0 ?'warning' : ''],
       ['Aguardando aprovação', totals.aguardandoAprovacao, totals.aguardandoAprovacao > 0 ?'alert' : ''],
       ['Aprovados', totals.aprovadas, 'success'],
       ['Recusados', totals.recusadas, totals.recusadas > 0 ?'danger' : ''],
+      ['Sem cobrança', totals.semCobranca, ''],
+      ['Em andamento', totals.andamento, totals.andamento > 0 ?'warning' : ''],
       ['Em execução', totals.emExecucao, 'warning'],
       ['Finalizadas', totals.finalizadas, 'success'],
       ['Entregues', totals.entregues, 'success'],
@@ -46,6 +49,7 @@
     });
 
     const items = [
+      ['Em orçamento', totals.orcamento, orders.filter(function (order) { return order.statusServico === 'orçamento'; }).slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') || 'Nenhuma OS em orçamento'],
       ['Aguardando aprovação', totals.aguardandoAprovacao, orders.filter(function (order) { return order.statusServico === 'aguardando aprovação'; }).slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') || 'Nenhum orçamento pendente'],
       ['OS atrasadas', lateOrders.length, lateOrders.length ?lateOrders.slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') : 'Nenhuma OS fora do prazo'],
       ['Clientes com pendência', clientsWithPending.length, clientsWithPending.length ?clientsWithPending.slice(0, 3).map(function (order) { return order.cliente || 'Cliente sem nome'; }).join(', ') : 'Nenhum cliente pendente'],

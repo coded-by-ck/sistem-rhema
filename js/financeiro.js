@@ -145,11 +145,12 @@
 
   function pendingFinancialOrders(orders) {
     return orders.filter(function (order) {
-      return order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || getOrderRemaining(order) > 0;
+      return getOrderRemaining(order) > 0;
     });
   }
 
   function paymentLabel(status) {
+    if (status === 'sem cobrança') return 'Sem cobrança';
     if (status === 'pago') return 'Pago';
     if (status === 'parcial') return 'Parcial';
     return 'Pendente';
@@ -364,15 +365,11 @@
   function getFinanceStats(orders) {
     // Cálculo financeiro consolidado para os indicadores do caixa.
     const totals = calculateTotals(orders);
-    const activeOrders = orders.filter(function (order) {
-      return order.statusServico !== 'recusado'
-        || toNumber(order.valorTotal) > 0
-        || toNumber(order.valorEntrada) > 0
-        || getOrderRemaining(order) > 0;
-    });
+    const activeOrders = orders.filter(isOrderFinanciallyRelevant);
     const pagas = activeOrders.filter(function (order) { return order.statusPagamento === 'pago'; }).length;
     const parciais = activeOrders.filter(function (order) { return order.statusPagamento === 'parcial'; }).length;
-    const pendentes = activeOrders.filter(function (order) { return order.statusPagamento === 'pendente'; }).length;
+    const pendentes = activeOrders.filter(function (order) { return getOrderRemaining(order) > 0; }).length;
+    const semCobranca = orders.filter(function (order) { return order.statusPagamento === 'sem cobrança'; }).length;
     const activeTotal = activeOrders.reduce(function (sum, order) {
       return sum + toNumber(order.valorTotal);
     }, 0);
@@ -385,6 +382,7 @@
       osPendentes: pendentes,
       osPagas: pagas,
       osParciais: parciais,
+      osSemCobranca: semCobranca,
       ticketMedio
     };
   }
@@ -442,7 +440,7 @@
 
   function exportPendingOrders() {
     const orders = RetificaStorage.getOrders().filter(function (order) {
-      return order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || getOrderRemaining(order) > 0;
+      return getOrderRemaining(order) > 0;
     });
     if (!assertHasRows(orders)) return;
 
@@ -500,6 +498,7 @@
       ['OS Pagas', stats.osPagas],
       ['OS Pendentes', stats.osPendentes],
       ['OS Parciais', stats.osParciais],
+      ['OS Sem Cobrança', stats.osSemCobranca],
       ['Ticket Médio por OS', currencyForExcel(stats.ticketMedio)],
       ['Data de Geração', textForExcel(generatedDateText())]
     ];
@@ -516,7 +515,8 @@
       'Data do Pagamento',
       'Recebido Por'
     ];
-    const orderRows = orders.map(function (order) {
+    const financialOrders = orders.filter(isOrderFinanciallyRelevant);
+    const orderRows = financialOrders.map(function (order) {
       return [
         textForExcel(order.numeroOs),
         order.cliente || '',
@@ -566,7 +566,7 @@
         return String(b.dataEntrada || '').localeCompare(String(a.dataEntrada || ''));
       });
       const totalGasto = client.ordens.reduce(function (sum, order) {
-        return sum + toNumber(order.valorTotal);
+        return sum + (isOrderFinanciallyRelevant(order) ?toNumber(order.valorTotal) : 0);
       }, 0);
       const valorPendente = client.ordens.reduce(function (sum, order) {
         return sum + getOrderRemaining(order);
@@ -678,6 +678,7 @@
       ['OS pendentes', stats.osPendentes, stats.osPendentes > 0 ?'alert' : ''],
       ['OS pagas', stats.osPagas, 'success'],
       ['OS parciais', stats.osParciais, stats.osParciais > 0 ?'warning' : ''],
+      ['Sem cobrança', stats.osSemCobranca, ''],
       ['Ticket médio por OS', `<span class="money-value">${formatCurrency(stats.ticketMedio)}</span>`, '']
     ];
 
@@ -692,7 +693,7 @@
 
     return RetificaStorage.getOrders().filter(function (order) {
       const remaining = getOrderRemaining(order);
-      const hasPendingPayment = order.statusPagamento === 'pendente' || order.statusPagamento === 'parcial' || remaining > 0;
+      const hasPendingPayment = remaining > 0;
       const hasRegisteredPayment = hasReceiptPayment(order);
       const searchableText = [
         getOrderSearchText(order),
@@ -702,7 +703,11 @@
       ].join(' ').toLowerCase();
       const searchMatch = !search || searchableText.includes(search);
       const statusMatch = status === 'todos' || order.statusPagamento === status;
-      const visibilityMatch = status === 'pago' ?order.statusPagamento === 'pago' : hasPendingPayment || hasRegisteredPayment;
+      const visibilityMatch = status === 'sem cobrança'
+        ?order.statusPagamento === 'sem cobrança'
+        : status === 'pago'
+          ?order.statusPagamento === 'pago' && isOrderFinanciallyRelevant(order)
+          : hasPendingPayment || hasRegisteredPayment;
       return visibilityMatch && searchMatch && statusMatch;
     });
   }
@@ -727,6 +732,9 @@
         : '';
       const chargeButton = remaining > 0
         ?`<a class="btn btn-whatsapp" href="${createChargeLink(order)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`
+        : '';
+      const paidButton = order.statusPagamento !== 'sem cobrança'
+        ?`<button class="btn btn-secondary" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>`
         : '';
 
       return `
@@ -762,7 +770,7 @@
             ${chargeButton}
             ${paymentWhatsApp}
             ${receiptButton}
-            <button class="btn btn-secondary" type="button" data-action="paid" data-id="${escapeHtml(order.id)}">Marcar como pago</button>
+            ${paidButton}
             <a class="btn btn-secondary" href="nova-os.html?id=${encodeURIComponent(order.id)}">Editar OS</a>
           </div>
         </article>
