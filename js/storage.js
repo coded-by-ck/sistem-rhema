@@ -4,6 +4,7 @@
   const NEXT_OS_KEY = 'retificaOS.nextOsNumber';
   const DEMO_FLAG = 'retificaOS.demoLoaded';
   const COMPANY_KEY = 'retificaOS.companySettings';
+  const SUGGESTED_PRICES_KEY = 'retifica_precos_sugeridos';
 
   const DEFAULT_COMPANY = {
     nome: 'Retífica OS',
@@ -40,6 +41,95 @@
   function safeNumber(value) {
     const number = Number(value || 0);
     return Number.isFinite(number) ?number : 0;
+  }
+
+  function normalizeTextForKey(value) {
+    const text = String(value == null ?'' : value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text || 'nao-informado';
+  }
+
+  function getCombinationSource(data) {
+    return data || {};
+  }
+
+  function getPriceCombinationFields(data) {
+    const source = getCombinationSource(data);
+    return {
+      marca: source.marca,
+      modelo: source.modelo,
+      motor: source.motor,
+      quantidadeValvulas: source.quantidadeValvulas || source.qtdValvulas,
+      tipoCabecote: source.tipoCabecote,
+      quantidadeCabecotes: source.quantidadeCabecotes || source.qtdCabecotes,
+      peca: source.peca || source.pecaRecebida,
+      servico: source.servico || source.tipoServico
+    };
+  }
+
+  function isCompletePriceCombination(data) {
+    const fields = getPriceCombinationFields(data);
+    return ['marca', 'modelo', 'motor', 'quantidadeValvulas', 'tipoCabecote', 'quantidadeCabecotes', 'peca', 'servico'].every(function (field) {
+      return String(fields[field] || '').trim() !== '';
+    });
+  }
+
+  function generatePriceKey(data) {
+    const source = getPriceCombinationFields(data);
+    return [
+      source.marca,
+      source.modelo,
+      source.motor,
+      source.quantidadeValvulas,
+      source.tipoCabecote,
+      source.quantidadeCabecotes,
+      source.peca,
+      source.servico || source.tipoServico
+    ].map(normalizeTextForKey).join('|');
+  }
+
+  function normalizeExternalParts(parts) {
+    if (!Array.isArray(parts)) return [];
+    return parts.map(function (part) {
+      return {
+        nome: String(part && part.nome || '').trim(),
+        fornecedor: String(part && part.fornecedor || '').trim(),
+        valor: safeNumber(part && part.valor),
+        observacao: String(part && part.observacao || '').trim()
+      };
+    }).filter(function (part) {
+      return part.nome || part.fornecedor || part.valor > 0 || part.observacao;
+    });
+  }
+
+  function calculateOrderValues(order) {
+    const pecasExternas = normalizeExternalParts(order.pecasExternas);
+    const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
+      return sum + safeNumber(part.valor);
+    }, 0);
+    const hasServiceValue = order.valorServicoRetifica !== undefined && order.valorServicoRetifica !== null && order.valorServicoRetifica !== '';
+    const legacyTotal = safeNumber(order.valorTotal);
+    const valorServicoRetifica = hasServiceValue ?safeNumber(order.valorServicoRetifica) : Math.max(legacyTotal - subtotalPecasExternas, 0);
+    const descontoServicoAtivo = order.descontoServicoAtivo === true || order.descontoServicoAtivo === 'true';
+    const descontoServicoPercentual = descontoServicoAtivo ?safeNumber(order.descontoServicoPercentual || 5) : 0;
+    const valorDescontoServico = descontoServicoAtivo ?valorServicoRetifica * (descontoServicoPercentual / 100) : 0;
+    const valorServicoComDesconto = Math.max(valorServicoRetifica - valorDescontoServico, 0);
+    const valorTotal = valorServicoComDesconto + subtotalPecasExternas;
+
+    return {
+      pecasExternas,
+      subtotalPecasExternas,
+      valorServicoRetifica,
+      descontoServicoAtivo,
+      descontoServicoPercentual,
+      valorDescontoServico,
+      valorServicoComDesconto,
+      valorTotal
+    };
   }
 
   function addDaysIso(days) {
@@ -95,14 +185,32 @@
   function normalizeOrder(order, index) {
     const dataEntrada = order.dataEntrada || (order.criadoEm ?order.criadoEm.slice(0, 10) : todayIso());
     const statusServico = normalizeServiceStatus(order.statusServico);
-    const valorTotal = safeNumber(order.valorTotal);
-    const valorEntrada = safeNumber(order.valorEntrada);
+    const calculatedValues = calculateOrderValues(order);
+    const valorTotal = calculatedValues.valorTotal;
+    const valorEntrada = Math.min(safeNumber(order.valorEntrada), valorTotal);
     const statusPagamento = normalizePaymentStatus(order.statusPagamento, statusServico, valorTotal, valorEntrada);
     const dataRetirada = statusServico === 'entregue' ?(order.dataRetirada || todayIso()) : (order.dataRetirada || '');
+    const marca = String(order.marca || '').trim();
+    const modelo = String(order.modelo || '').trim();
+    const carro = String(order.carro || [marca, modelo].filter(Boolean).join(' ')).trim();
     const normalized = {
       ...order,
       numeroOs: orderNumberFromValue(order.numeroOs, index),
       dataEntrada,
+      marca,
+      modelo,
+      carro,
+      quantidadeValvulas: String(order.quantidadeValvulas || order.qtdValvulas || '').trim(),
+      tipoCabecote: String(order.tipoCabecote || '').trim(),
+      quantidadeCabecotes: String(order.quantidadeCabecotes || order.qtdCabecotes || '').trim(),
+      peca: order.peca || order.pecaRecebida || '',
+      valorServicoRetifica: calculatedValues.valorServicoRetifica,
+      descontoServicoAtivo: calculatedValues.descontoServicoAtivo,
+      descontoServicoPercentual: calculatedValues.descontoServicoPercentual,
+      valorDescontoServico: calculatedValues.valorDescontoServico,
+      valorServicoComDesconto: calculatedValues.valorServicoComDesconto,
+      pecasExternas: calculatedValues.pecasExternas,
+      subtotalPecasExternas: calculatedValues.subtotalPecasExternas,
       valorTotal,
       valorEntrada,
       statusPagamento,
@@ -184,6 +292,65 @@
     },
 
     calculateRemaining,
+
+    normalizeTextForPriceKey: normalizeTextForKey,
+
+    generateSuggestedPriceKey: generatePriceKey,
+
+    isCompleteSuggestedPriceCombination: isCompletePriceCombination,
+
+    getSuggestedPrices() {
+      return read(SUGGESTED_PRICES_KEY, {});
+    },
+
+    findSuggestedPrice(data) {
+      if (!isCompletePriceCombination(data)) return null;
+      const key = generatePriceKey(data);
+      const prices = this.getSuggestedPrices();
+      return prices[key] ?{ key, ...prices[key] } : null;
+    },
+
+    saveSuggestedPrice(data, valorServicoRetifica, incrementUsage) {
+      if (!isCompletePriceCombination(data)) return null;
+      const key = generatePriceKey(data);
+      const prices = this.getSuggestedPrices();
+      const existing = prices[key] || {};
+      const value = safeNumber(valorServicoRetifica);
+      if (value <= 0) return null;
+      const fields = getPriceCombinationFields(data);
+      prices[key] = {
+        marca: String(fields.marca || '').trim(),
+        modelo: String(fields.modelo || '').trim(),
+        motor: String(fields.motor || '').trim(),
+        quantidadeValvulas: String(fields.quantidadeValvulas || '').trim(),
+        tipoCabecote: String(fields.tipoCabecote || '').trim(),
+        quantidadeCabecotes: String(fields.quantidadeCabecotes || '').trim(),
+        peca: String(fields.peca || '').trim(),
+        servico: String(fields.servico || '').trim(),
+        valorServicoRetifica: value,
+        ultimaAtualizacao: new Date().toISOString(),
+        vezesUsado: safeNumber(existing.vezesUsado) + (incrementUsage ?1 : 0)
+      };
+      write(SUGGESTED_PRICES_KEY, prices);
+      return { key, ...prices[key] };
+    },
+
+    updateSuggestedPrice(data, valorServicoRetifica) {
+      return this.saveSuggestedPrice(data, valorServicoRetifica, false);
+    },
+
+    incrementSuggestedPriceUsage(data) {
+      const key = generatePriceKey(data);
+      const prices = this.getSuggestedPrices();
+      if (!prices[key]) return null;
+      prices[key] = {
+        ...prices[key],
+        vezesUsado: safeNumber(prices[key].vezesUsado) + 1,
+        ultimaAtualizacao: new Date().toISOString()
+      };
+      write(SUGGESTED_PRICES_KEY, prices);
+      return { key, ...prices[key] };
+    },
 
     saveOrder(order) {
       const orders = this.getOrders();

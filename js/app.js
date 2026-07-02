@@ -242,6 +242,52 @@ function hasReceiptPayment(order) {
   return getReceiptPaidAmount(order) > 0;
 }
 
+function hasDetailedOrderValues(order) {
+  return Number(order && order.valorServicoRetifica || 0) > 0
+    || Number(order && order.valorDescontoServico || 0) > 0
+    || Number(order && order.subtotalPecasExternas || 0) > 0;
+}
+
+function getOrderValueLines(order) {
+  if (!hasDetailedOrderValues(order)) {
+    return [
+      ['Valor total', order && order.valorTotal],
+      ['Entrada', order && order.valorEntrada],
+      ['Restante', getOrderRemaining(order)]
+    ];
+  }
+  return [
+    ['Valor do serviço da retífica', order && order.valorServicoRetifica],
+    ['Desconto no serviço', order && order.valorDescontoServico],
+    ['Serviço com desconto', order && order.valorServicoComDesconto],
+    ['Peças externas', order && order.subtotalPecasExternas],
+    ['Total final', order && order.valorTotal],
+    ['Entrada', order && order.valorEntrada],
+    ['Restante', getOrderRemaining(order)]
+  ];
+}
+
+function renderOrderValueItems(order) {
+  return getOrderValueLines(order).map(function (line) {
+    return `<div class="item"><strong>${escapeHtml(line[0])}</strong>${formatCurrency(line[1])}</div>`;
+  }).join('');
+}
+
+function renderOrderValueParagraphs(order) {
+  return getOrderValueLines(order).map(function (line) {
+    return `<p><strong>${escapeHtml(line[0])}:</strong> ${formatCurrency(line[1])}</p>`;
+  }).join('');
+}
+
+function renderExternalPartsItems(order) {
+  const parts = Array.isArray(order && order.pecasExternas) ?order.pecasExternas : [];
+  if (!parts.length) return '';
+  return parts.map(function (part) {
+    const label = [part.nome || 'Peça externa', part.fornecedor].filter(Boolean).join(' - ');
+    return `<div class="item"><strong>${escapeHtml(label)}</strong>${formatCurrency(part.valor)}${part.observacao ?`<br>${escapeHtml(part.observacao)}` : ''}</div>`;
+  }).join('');
+}
+
 function canGenerateReceipt(order) {
   if (!order) return false;
   if (order.statusPagamento === 'sem cobrança') return false;
@@ -368,6 +414,7 @@ function imprimirTermoRetirada(order) {
         <div class="item"><strong>Data de retirada</strong>${formatDate(order.dataRetirada)}</div>
         ${optionalItem('Retirado por', order.retiradoPor)}
         ${optionalItem('Documento de quem retirou', order.documentoRetirada)}
+        ${renderOrderValueItems(order)}
       </section>
       ${optionalNote}
       <p class="declaration">Declaro que recebi a peça/serviço referente à Ordem de Serviço acima, estando ciente das informações registradas neste documento.</p>
@@ -449,13 +496,12 @@ function imprimirRecibo(order) {
       <div class="valor-pago-destaque"><span>Valor pago</span><strong>${formatCurrency(paidAmount)}</strong></div>
       <h2>Valores</h2>
       <section class="grid">
-        <div class="item"><strong>Valor total</strong>${formatCurrency(order.valorTotal)}</div>
-        <div class="item"><strong>Entrada</strong>${formatCurrency(order.valorEntrada)}</div>
-        <div class="item"><strong>Restante</strong>${formatCurrency(getOrderRemaining(order))}</div>
+        ${renderOrderValueItems(order)}
         ${optionalItem('Forma de pagamento', order.formaPagamento)}
         ${optionalDateItem('Data do pagamento', order.dataPagamento)}
         ${optionalItem('Recebido por', order.recebidoPor)}
       </section>
+      ${renderExternalPartsItems(order) ?`<h2>Peças externas</h2><section class="grid">${renderExternalPartsItems(order)}</section>` : ''}
       ${optionalNote}
       <section class="signatures">
         <div class="signature">Assinatura da empresa</div>
@@ -511,8 +557,7 @@ function imprimirComprovanteRapido(order) {
       ${optionalLine('Serviço', order.tipoServico)}
       ${optionalLine('Peça/Cabeçote', order.peca)}
       <div class="total">Valor pago<br>${formatCurrency(paidAmount)}</div>
-      <p><strong>Valor total:</strong> ${formatCurrency(order.valorTotal)}</p>
-      <p><strong>Restante:</strong> ${formatCurrency(getOrderRemaining(order))}</p>
+      ${renderOrderValueParagraphs(order)}
       ${optionalLine('Forma', order.formaPagamento)}
       ${optionalLine('Status', order.statusPagamento)}
       ${optionalDateLine('Data pagamento', order.dataPagamento)}

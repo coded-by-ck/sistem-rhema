@@ -329,6 +329,10 @@
       order.carro || '',
       order.ano || '',
       order.motor || '',
+      currencyForExcel(order.valorServicoRetifica),
+      currencyForExcel(order.valorDescontoServico),
+      currencyForExcel(order.valorServicoComDesconto),
+      currencyForExcel(order.subtotalPecasExternas),
       order.peca || '',
       order.tipoServico || '',
       currencyForExcel(order.valorTotal),
@@ -398,6 +402,10 @@
       'Carro',
       'Ano',
       'Motor',
+      'Valor do Serviço da Retífica',
+      'Desconto no Serviço',
+      'Serviço com Desconto',
+      'Peças Externas',
       'Peça/Cabeçote',
       'Serviço',
       'Valor Total',
@@ -760,9 +768,10 @@
           </div>
 
           <div class="order-values">
-            <span><strong>Valor total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
+            ${hasDetailedOrderValues(order) ?renderOrderValueItems(order) : ''}
+            ${!hasDetailedOrderValues(order) ?`<span><strong>Valor total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
             <span><strong>Entrada</strong><span class="money-value">${formatCurrency(order.valorEntrada)}</span></span>
-            <span class="${remaining > 0 ?'value-pending' : 'value-paid'}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
+            <span class="${remaining > 0 ?'value-pending' : 'value-paid'}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>` : ''}
             <span><strong>Forma</strong>${escapeHtml(order.formaPagamento || 'Não informada')}</span>
             <span><strong>Data pagamento</strong>${order.dataPagamento ?formatDate(order.dataPagamento) : 'Não informada'}</span>
           </div>

@@ -20,10 +20,16 @@
   const clientHistory = document.getElementById('clientHistory');
   const params = new URLSearchParams(window.location.search);
   const editId = params.get('id') || params.get('edit');
+  const suggestedPriceMessage = document.getElementById('suggestedPriceMessage');
+  const toggleServiceDiscountButton = document.getElementById('toggleServiceDiscount');
+  const addExternalPartButton = document.getElementById('addExternalPart');
+  const externalPartsList = document.getElementById('externalPartsList');
   let selectedClientKey = '';
   let openOrderId = '';
   let activeQuickFilter = '';
   let labelsModeActive = false;
+  let autoPriceApplied = false;
+  let servicePriceManuallyEdited = false;
   const selectedLabelOrderIds = new Set();
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
@@ -70,9 +76,275 @@
     return statusServico === 'recusado' && toNumber(valorTotal) === 0 && toNumber(valorEntrada) === 0;
   }
 
+  function getFormValue(name) {
+    if (!form) return '';
+    const fields = Array.from(form.querySelectorAll(`[name="${name}"]`)).filter(function (field) {
+      return !field.disabled;
+    });
+    return fields.length ?fields[0].value : '';
+  }
+
+  function getFirstFormValue(names) {
+    const fieldNames = Array.isArray(names) ?names : [names];
+    for (let index = 0; index < fieldNames.length; index += 1) {
+      const value = String(getFormValue(fieldNames[index]) || '').trim();
+      if (value) return value;
+    }
+    return '';
+  }
+
+  function getVehicleName(marca, modelo, fallback) {
+    return [marca, modelo].filter(Boolean).join(' ').trim() || fallback || '';
+  }
+
+  function getPriceCombinationFromForm() {
+    return {
+      marca: getFirstFormValue('marca'),
+      modelo: getFirstFormValue('modelo'),
+      motor: getFirstFormValue('motor'),
+      quantidadeValvulas: getFirstFormValue(['quantidadeValvulas', 'qtdValvulas']),
+      tipoCabecote: getFirstFormValue('tipoCabecote'),
+      quantidadeCabecotes: getFirstFormValue(['quantidadeCabecotes', 'qtdCabecotes']),
+      peca: getFirstFormValue(['peca', 'pecaRecebida']),
+      servico: getFirstFormValue(['tipoServico', 'servico'])
+    };
+  }
+
+  function isPriceCombinationComplete(combination) {
+    const fields = combination || getPriceCombinationFromForm();
+    return ['marca', 'modelo', 'motor', 'quantidadeValvulas', 'tipoCabecote', 'quantidadeCabecotes', 'peca', 'servico'].every(function (field) {
+      return String(fields[field] || '').trim() !== '';
+    });
+  }
+
+  function getExternalPartsFromForm() {
+    if (!externalPartsList) return [];
+    return Array.from(externalPartsList.querySelectorAll('[data-external-part]')).map(function (row) {
+      return {
+        nome: String(row.querySelector('[data-part-field="nome"]').value || '').trim(),
+        fornecedor: String(row.querySelector('[data-part-field="fornecedor"]').value || '').trim(),
+        valor: toNumber(row.querySelector('[data-part-field="valor"]').value),
+        observacao: String(row.querySelector('[data-part-field="observacao"]').value || '').trim()
+      };
+    }).filter(function (part) {
+      return part.nome || part.fornecedor || part.valor > 0 || part.observacao;
+    });
+  }
+
+  function addExternalPartRow(part) {
+    if (!externalPartsList) return;
+    const row = document.createElement('div');
+    row.className = 'external-part-row';
+    row.dataset.externalPart = 'true';
+    row.innerHTML = `
+      <label>Nome da peça<input data-part-field="nome" type="text" value="${escapeHtml(part && part.nome || '')}"></label>
+      <label>Fornecedor<input data-part-field="fornecedor" type="text" value="${escapeHtml(part && part.fornecedor || '')}"></label>
+      <label>Valor<input data-part-field="valor" type="number" min="0" step="0.01" value="${part && part.valor ?toNumber(part.valor) : ''}"></label>
+      <label>Observação<input data-part-field="observacao" type="text" value="${escapeHtml(part && part.observacao || '')}"></label>
+      <button class="btn btn-danger" type="button" data-remove-external-part>Remover</button>
+    `;
+    externalPartsList.appendChild(row);
+  }
+
+  function calculateFormValues() {
+    if (!form) return;
+    const valorServicoRetifica = toNumber(getFormValue('valorServicoRetifica'));
+    const pecasExternas = getExternalPartsFromForm();
+    const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
+      return sum + toNumber(part.valor);
+    }, 0);
+    const descontoAtivo = getFormValue('descontoServicoAtivo') === 'true';
+    const descontoPercentual = descontoAtivo ?5 : 0;
+    const valorDescontoServico = descontoAtivo ?valorServicoRetifica * (descontoPercentual / 100) : 0;
+    const valorServicoComDesconto = Math.max(valorServicoRetifica - valorDescontoServico, 0);
+    const valorTotal = valorServicoComDesconto + subtotalPecasExternas;
+
+    if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = String(descontoPercentual);
+    if (form.subtotalPecasExternas) form.subtotalPecasExternas.value = subtotalPecasExternas.toFixed(2);
+    if (form.valorDescontoServico) form.valorDescontoServico.value = valorDescontoServico.toFixed(2);
+    if (form.valorServicoComDesconto) form.valorServicoComDesconto.value = valorServicoComDesconto.toFixed(2);
+    if (form.valorTotal) form.valorTotal.value = valorTotal.toFixed(2);
+    if (toggleServiceDiscountButton) {
+      toggleServiceDiscountButton.textContent = descontoAtivo ?'Remover desconto de 5%' : 'Aplicar desconto de 5%';
+      toggleServiceDiscountButton.classList.toggle('btn-danger', descontoAtivo);
+      toggleServiceDiscountButton.classList.toggle('btn-secondary', !descontoAtivo);
+    }
+  }
+
+  function setSuggestedPriceMessage(visible) {
+    if (suggestedPriceMessage) suggestedPriceMessage.hidden = !visible;
+  }
+
+  function applyHistoricalServicePrice() {
+    if (!form || editId || !form.valorServicoRetifica || servicePriceManuallyEdited) {
+      setSuggestedPriceMessage(false);
+      return;
+    }
+    const combination = getPriceCombinationFromForm();
+    if (!isPriceCombinationComplete(combination)) {
+      if (autoPriceApplied) {
+        form.valorServicoRetifica.value = '';
+        autoPriceApplied = false;
+        updateRemainingPreview();
+      }
+      setSuggestedPriceMessage(false);
+      return;
+    }
+    const currentValue = String(form.valorServicoRetifica.value || '').trim();
+    if (currentValue && !autoPriceApplied) {
+      setSuggestedPriceMessage(false);
+      return;
+    }
+    const suggested = RetificaStorage.findSuggestedPrice(combination);
+    if (!suggested || toNumber(suggested.valorServicoRetifica) <= 0) {
+      if (autoPriceApplied) {
+        form.valorServicoRetifica.value = '';
+        autoPriceApplied = false;
+        updateRemainingPreview();
+      }
+      setSuggestedPriceMessage(false);
+      return;
+    }
+    form.valorServicoRetifica.value = toNumber(suggested.valorServicoRetifica).toFixed(2);
+    autoPriceApplied = true;
+    setSuggestedPriceMessage(true);
+    updateRemainingPreview();
+  }
+
+  function setCollapsibleState(section, open) {
+    if (!section) return;
+    const content = section.querySelector('[data-collapsible-content]');
+    const toggle = section.querySelector('[data-collapsible-toggle]');
+    section.classList.toggle('is-open', Boolean(open));
+    if (toggle) toggle.setAttribute('aria-expanded', open ?'true' : 'false');
+    if (content) content.style.maxHeight = open ?`${content.scrollHeight}px` : '0px';
+  }
+
+  function refreshOpenCollapsibles() {
+    if (!form) return;
+    form.querySelectorAll('.collapsible-section.is-open').forEach(function (section) {
+      const content = section.querySelector('[data-collapsible-content]');
+      if (content) content.style.maxHeight = `${content.scrollHeight}px`;
+    });
+  }
+
+  function prepareCollapsible(section, options) {
+    if (!section || section.dataset.collapsibleReady === 'true') return;
+    const settings = options || {};
+    const title = section.querySelector('.form-section-title, .nested-collapsible-toggle');
+    const content = settings.content || section.querySelector('.form-grid');
+    if (!title || !content) return;
+    section.classList.add('collapsible-section');
+    content.classList.add('collapsible-content');
+    title.classList.add('collapsible-toggle');
+    title.dataset.collapsibleToggle = 'true';
+    content.dataset.collapsibleContent = 'true';
+    title.setAttribute('role', 'button');
+    title.setAttribute('tabindex', '0');
+    if (!title.querySelector('.collapsible-arrow')) {
+      const arrow = document.createElement('span');
+      arrow.className = 'collapsible-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '▾';
+      title.appendChild(arrow);
+    }
+    const toggle = function () {
+      setCollapsibleState(section, !section.classList.contains('is-open'));
+    };
+    title.addEventListener('click', toggle);
+    title.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggle();
+    });
+    section.dataset.collapsibleReady = 'true';
+    setCollapsibleState(section, Boolean(settings.open));
+  }
+
+  function createNestedCollapsible(titleText, fields, open) {
+    const fieldsToMove = fields.filter(Boolean);
+    if (!fieldsToMove.length) return null;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'nested-collapsible full-width collapsible-section';
+    const button = document.createElement('div');
+    button.className = 'nested-collapsible-toggle';
+    const title = document.createElement('span');
+    title.textContent = titleText;
+    button.appendChild(title);
+    const content = document.createElement('div');
+    content.className = 'form-grid';
+    fieldsToMove[0].parentNode.insertBefore(wrapper, fieldsToMove[0]);
+    wrapper.appendChild(button);
+    wrapper.appendChild(content);
+    fieldsToMove.forEach(function (field) {
+      content.appendChild(field);
+    });
+    prepareCollapsible(wrapper, { content, open });
+    return wrapper;
+  }
+
+  function hasAnyValue(names) {
+    return names.some(function (name) {
+      const field = form.elements[name];
+      if (!field) return false;
+      if (field.tagName === 'SELECT') return field.value && field.value !== 'pendente' && field.value !== 'não';
+      return String(field.value || '').trim() !== '';
+    });
+  }
+
+  function setupFormCollapsibles(existingOrder) {
+    if (!form) return;
+    const sections = Array.from(form.children).filter(function (child) {
+      return child.classList && child.classList.contains('form-section');
+    });
+    const budgetSection = sections[3];
+    const paymentSection = sections[4];
+    const withdrawalSection = sections[5];
+    const notesSection = sections[6];
+    const vehicleTitle = sections[1] && sections[1].querySelector('.form-section-title h2');
+    if (vehicleTitle) vehicleTitle.textContent = 'Dados do veículo/peça/cabeçote';
+
+    if (paymentSection) {
+      const paymentTitle = paymentSection.querySelector('.form-section-title h2');
+      if (paymentTitle) paymentTitle.textContent = 'Serviço e valores';
+      createNestedCollapsible('Pagamento detalhado', [
+        form.statusPagamento && form.statusPagamento.closest('label'),
+        form.formaPagamento && form.formaPagamento.closest('label'),
+        form.dataPagamento && form.dataPagamento.closest('label'),
+        form.recebidoPor && form.recebidoPor.closest('label'),
+        form.observacaoPagamento && form.observacaoPagamento.closest('label')
+      ], Boolean(existingOrder && hasAnyValue(['statusPagamento', 'formaPagamento', 'dataPagamento', 'recebidoPor', 'observacaoPagamento'])));
+    }
+
+    if (notesSection) {
+      const notesTitle = notesSection.querySelector('.form-section-title h2');
+      if (notesTitle) notesTitle.textContent = 'Observação principal';
+      createNestedCollapsible('Observações avançadas', [
+        form.observacoesGerais && form.observacoesGerais.closest('label')
+      ], Boolean(existingOrder && hasAnyValue(['observacoesGerais'])));
+    }
+
+    prepareCollapsible(budgetSection, {
+      open: Boolean(existingOrder && hasAnyValue(['valorOrcado', 'dataOrcamento', 'dataAprovacao', 'observacaoOrcamento']))
+    });
+    prepareCollapsible(withdrawalSection, {
+      open: Boolean(existingOrder && hasAnyValue(['dataRetirada', 'retiradoPor', 'documentoRetirada', 'observacaoRetirada']))
+    });
+  }
+
   function collectOrderFromForm(existingOrder) {
     // Geração de OS: normaliza campos do formulário antes de salvar no localStorage.
+    calculateFormValues();
     const data = new FormData(form);
+    const marca = String(data.get('marca') || '').trim();
+    const modelo = String(data.get('modelo') || '').trim();
+    const pecasExternas = getExternalPartsFromForm();
+    const valorServicoRetifica = toNumber(data.get('valorServicoRetifica'));
+    const descontoServicoAtivo = data.get('descontoServicoAtivo') === 'true';
+    const descontoServicoPercentual = descontoServicoAtivo ?toNumber(data.get('descontoServicoPercentual') || 5) : 0;
+    const valorDescontoServico = descontoServicoAtivo ?valorServicoRetifica * (descontoServicoPercentual / 100) : 0;
+    const valorServicoComDesconto = Math.max(valorServicoRetifica - valorDescontoServico, 0);
+    const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) { return sum + toNumber(part.valor); }, 0);
     const valorTotal = toNumber(data.get('valorTotal'));
     const valorEntrada = Math.min(toNumber(data.get('valorEntrada')), valorTotal);
     const statusServico = data.get('statusServico');
@@ -98,11 +370,23 @@
       dataEntrada: existingOrder ?existingOrder.dataEntrada : data.get('dataEntrada'),
       cliente: String(data.get('cliente') || '').trim(),
       telefone: String(data.get('telefone') || '').trim(),
-      carro: String(data.get('carro') || '').trim(),
+      marca,
+      modelo,
+      carro: getVehicleName(marca, modelo, data.get('carro')),
       ano: data.get('ano') || '',
       motor: String(data.get('motor') || '').trim(),
+      quantidadeValvulas: String(data.get('quantidadeValvulas') || '').trim(),
+      tipoCabecote: String(data.get('tipoCabecote') || '').trim(),
+      quantidadeCabecotes: String(data.get('quantidadeCabecotes') || '').trim(),
       peca: String(data.get('peca') || '').trim(),
       tipoServico: String(data.get('tipoServico') || '').trim(),
+      valorServicoRetifica,
+      descontoServicoAtivo,
+      descontoServicoPercentual,
+      valorDescontoServico,
+      valorServicoComDesconto,
+      pecasExternas,
+      subtotalPecasExternas,
       valorTotal,
       valorEntrada,
       valorRestante: statusPagamento === 'pago' || statusPagamento === 'sem cobrança' ?0 : Math.max(valorTotal - valorEntrada, 0),
@@ -128,8 +412,39 @@
     };
   }
 
+  function getPriceCombinationFromOrder(order) {
+    return {
+      marca: order && order.marca,
+      modelo: order && order.modelo,
+      motor: order && order.motor,
+      quantidadeValvulas: order && (order.quantidadeValvulas || order.qtdValvulas),
+      tipoCabecote: order && order.tipoCabecote,
+      quantidadeCabecotes: order && (order.quantidadeCabecotes || order.qtdCabecotes),
+      peca: order && (order.peca || order.pecaRecebida),
+      servico: order && (order.tipoServico || order.servico)
+    };
+  }
+
+  function saveHistoricalServicePrice(order) {
+    if (!order || toNumber(order.valorServicoRetifica) <= 0) return;
+    RetificaStorage.saveSuggestedPrice(getPriceCombinationFromOrder(order), order.valorServicoRetifica, true);
+  }
+
+  function toggleServiceDiscount() {
+    if (!form || !form.descontoServicoAtivo) return;
+    form.descontoServicoAtivo.value = form.descontoServicoAtivo.value === 'true' ?'false' : 'true';
+    if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = form.descontoServicoAtivo.value === 'true' ?'5' : '0';
+    updateRemainingPreview();
+  }
+
+  function addExternalPart() {
+    addExternalPartRow();
+    updateRemainingPreview();
+  }
+
   function updateRemainingPreview() {
     if (!form) return;
+    calculateFormValues();
     const valorTotal = toNumber(form.valorTotal.value);
     const valorEntrada = toNumber(form.valorEntrada.value);
     if (shouldUseNoChargeStatus(form.statusServico.value, valorTotal, valorEntrada)) {
@@ -140,6 +455,7 @@
     const statusPagamento = form.statusPagamento.value;
     const remaining = statusPagamento === 'pago' || statusPagamento === 'sem cobrança' ?0 : Math.max(valorTotal - valorEntrada, 0);
     document.getElementById('valorRestante').value = formatCurrency(remaining);
+    refreshOpenCollapsibles();
   }
 
   function fillForm(order) {
@@ -147,11 +463,23 @@
     form.dataEntrada.value = order.dataEntrada || '';
     form.cliente.value = order.cliente || '';
     form.telefone.value = order.telefone || '';
-    form.carro.value = order.carro || '';
+    if (form.marca) form.marca.value = order.marca || '';
+    if (form.modelo) form.modelo.value = order.modelo || (!order.marca ?order.carro || '' : '');
+    if (form.carro) form.carro.value = order.carro || '';
     form.ano.value = order.ano || '';
     form.motor.value = order.motor || '';
+    if (form.quantidadeValvulas) form.quantidadeValvulas.value = order.quantidadeValvulas || '';
+    if (form.tipoCabecote) form.tipoCabecote.value = order.tipoCabecote || '';
+    if (form.quantidadeCabecotes) form.quantidadeCabecotes.value = order.quantidadeCabecotes || '';
     form.peca.value = order.peca || '';
     form.tipoServico.value = order.tipoServico || '';
+    if (form.valorServicoRetifica) form.valorServicoRetifica.value = toNumber(order.valorServicoRetifica) || '';
+    if (form.descontoServicoAtivo) form.descontoServicoAtivo.value = order.descontoServicoAtivo ?'true' : 'false';
+    if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = toNumber(order.descontoServicoPercentual) || 5;
+    if (externalPartsList) {
+      externalPartsList.innerHTML = '';
+      (order.pecasExternas || []).forEach(addExternalPartRow);
+    }
     form.valorTotal.value = toNumber(order.valorTotal);
     form.valorEntrada.value = toNumber(order.valorEntrada);
     form.statusServico.value = order.statusServico || 'recebido';
@@ -179,6 +507,12 @@
     const existingOrder = editId ?RetificaStorage.getOrderById(editId) : null;
     const formTitle = document.getElementById('formTitle');
     const submitButton = document.getElementById('submitButton');
+    const duplicatedServiceFields = form.querySelectorAll('input[name="tipoServico"]');
+    if (duplicatedServiceFields.length > 1) {
+      duplicatedServiceFields[1].closest('label').hidden = true;
+      duplicatedServiceFields[1].disabled = true;
+      duplicatedServiceFields[1].name = 'tipoServicoDuplicado';
+    }
 
     if (editId && !existingOrder) {
       alert('OS não encontrada. Você será redirecionado para a lista de serviços.');
@@ -195,12 +529,57 @@
       form.dataEntrada.value = RetificaStorage.getTodayIso();
       updateRemainingPreview();
     }
+    setupFormCollapsibles(existingOrder);
+    setSuggestedPriceMessage(false);
 
     ['input', 'change'].forEach(function (eventName) {
       form.valorTotal.addEventListener(eventName, updateRemainingPreview);
       form.valorEntrada.addEventListener(eventName, updateRemainingPreview);
       form.statusPagamento.addEventListener(eventName, updateRemainingPreview);
+      if (form.valorServicoRetifica) form.valorServicoRetifica.addEventListener(eventName, updateRemainingPreview);
+      if (externalPartsList) externalPartsList.addEventListener(eventName, updateRemainingPreview);
     });
+    ['marca', 'modelo', 'motor', 'quantidadeValvulas', 'qtdValvulas', 'tipoCabecote', 'quantidadeCabecotes', 'qtdCabecotes', 'peca', 'pecaRecebida', 'tipoServico', 'servico'].forEach(function (fieldName) {
+      if (!form.elements[fieldName]) return;
+      form.elements[fieldName].addEventListener('input', function () {
+        applyHistoricalServicePrice();
+      });
+      form.elements[fieldName].addEventListener('change', function () {
+        applyHistoricalServicePrice();
+      });
+    });
+    if (form.valorServicoRetifica) {
+      form.valorServicoRetifica.addEventListener('input', function () {
+        servicePriceManuallyEdited = true;
+        autoPriceApplied = false;
+        setSuggestedPriceMessage(false);
+      });
+    }
+    applyHistoricalServicePrice();
+    document.addEventListener('click', function (event) {
+      const discountButton = event.target.closest('[data-action="toggle-discount"], #toggleServiceDiscount');
+      if (discountButton && form.contains(discountButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleServiceDiscount();
+        return;
+      }
+
+      const addPartButton = event.target.closest('[data-action="add-external-part"], #addExternalPart');
+      if (addPartButton && form.contains(addPartButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        addExternalPart();
+      }
+    });
+    if (externalPartsList) {
+      externalPartsList.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-remove-external-part]');
+        if (!button) return;
+        button.closest('[data-external-part]').remove();
+        updateRemainingPreview();
+      });
+    }
     form.statusServico.addEventListener('change', function () {
       if (form.statusServico.value === 'entregue' && !form.dataRetirada.value) {
         form.dataRetirada.value = RetificaStorage.getTodayIso();
@@ -223,9 +602,11 @@
 
       if (existingOrder) {
         RetificaStorage.updateOrder(existingOrder.id, order);
+        saveHistoricalServicePrice(order);
         setFlashMessage('OS atualizada com sucesso.');
       } else {
-        RetificaStorage.saveOrder(order);
+        const savedOrder = RetificaStorage.saveOrder(order);
+        saveHistoricalServicePrice(savedOrder);
         setFlashMessage('OS salva com sucesso.');
       }
 
@@ -339,12 +720,11 @@
 
         <h2>Valores</h2>
         <section class="grid">
-          <div class="item"><strong>Valor total</strong>${formatCurrency(order.valorTotal)}</div>
-          <div class="item"><strong>Entrada</strong>${formatCurrency(order.valorEntrada)}</div>
-          <div class="item"><strong>Restante</strong>${formatCurrency(getOrderRemaining(order))}</div>
+          ${renderOrderValueItems(order)}
           <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'Não informado')}</div>
         </section>
 
+        ${renderExternalPartsItems(order) ?`<h2>Peças externas</h2><section class="grid">${renderExternalPartsItems(order)}</section>` : ''}
         ${budgetSection}
         ${withdrawalSection}
         ${optionalNotes('Observações da peça', order.observacoesPeca)}
@@ -519,6 +899,36 @@
     return toNumber(value) > 0 ?`<span><strong>${escapeHtml(label)}</strong><span class="money-value">${formatCurrency(value)}</span></span>` : '';
   }
 
+  function hasDetailedValues(order) {
+    return toNumber(order.valorServicoRetifica) > 0
+      || toNumber(order.subtotalPecasExternas) > 0
+      || toNumber(order.valorDescontoServico) > 0;
+  }
+
+  function renderExternalPartsSummary(order) {
+    const parts = Array.isArray(order.pecasExternas) ?order.pecasExternas : [];
+    if (!parts.length) return '';
+    return `<div class="detail-section">
+      <h4>Peças externas</h4>
+      <div class="order-info-grid">
+        ${parts.map(function (part) {
+          const title = [part.nome || 'Peça externa', part.fornecedor].filter(Boolean).join(' - ');
+          return `<span><strong>${escapeHtml(title)}</strong><span class="money-value">${formatCurrency(part.valor)}</span>${part.observacao ?`<small>${escapeHtml(part.observacao)}</small>` : ''}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  function renderDetailedValueItems(order) {
+    if (!hasDetailedValues(order)) return '';
+    return [
+      detailMoneyItem('Serviço retífica', order.valorServicoRetifica),
+      detailMoneyItem('Desconto serviço', order.valorDescontoServico),
+      detailMoneyItem('Serviço com desconto', order.valorServicoComDesconto),
+      detailMoneyItem('Peças externas', order.subtotalPecasExternas)
+    ].join('');
+  }
+
   function scrollToOpenOrder(id) {
     window.requestAnimationFrame(function () {
       window.requestAnimationFrame(function () {
@@ -549,6 +959,7 @@
       ?`<label class="label-select"><input type="checkbox" data-label-select="${escapeHtml(order.id)}" ${selectedLabelOrderIds.has(order.id) ?'checked' : ''}> Etiqueta</label>`
       : '';
     const paymentSummaryClass = remaining > 0 ?'value-pending' : 'value-paid';
+    const vehicleSummary = order.carro || order.modelo || 'Não informado';
     const waitingApproval = order.statusServico === 'aguardando aprovação';
     const sendBudgetAction = canSendBudget(order)
       ?`<a class="btn btn-mini btn-mini-whatsapp" href="${createBudgetWhatsAppLink(order)}" target="_blank" rel="noopener">Enviar orçamento</a>`
@@ -566,7 +977,8 @@
     const withdrawalWhatsApp = canGenerateWithdrawalTerm(order)
       ?`<a class="btn btn-secondary" href="${createWithdrawalWhatsAppLink(order)}" target="_blank" rel="noopener">WhatsApp retirada</a>`
       : '';
-    const expanded = openOrderId === order.id;
+    const orderId = String(order.id);
+    const expanded = openOrderId === orderId;
     const hasBudgetDetails = toNumber(order.valorOrcado) > 0 || order.dataOrcamento || order.dataAprovacao || order.observacaoOrcamento;
     const hasWithdrawalDetails = order.dataRetirada || order.retiradoPor || order.documentoRetirada || order.observacaoRetirada;
     const hasPaymentDetails = order.formaPagamento || order.dataPagamento || order.recebidoPor || order.observacaoPagamento;
@@ -615,8 +1027,7 @@
         </div>
       </div>`
       : '';
-    const detailsHtml = expanded
-      ?`<div class="order-card-details">
+    const detailsHtml = `<div class="order-card-details" ${expanded ?'' : 'hidden'}>
         <div class="detail-section">
           <h4>Dados da OS</h4>
           <div class="order-info-grid">
@@ -624,6 +1035,11 @@
             <span><strong>Carro</strong>${escapeHtml(order.carro || 'Não informado')}</span>
             ${detailItem('Ano', order.ano)}
             ${detailItem('Motor', order.motor)}
+            ${detailItem('Marca', order.marca)}
+            ${detailItem('Modelo', order.modelo)}
+            ${detailItem('Válvulas', order.quantidadeValvulas)}
+            ${detailItem('Tipo de cabeçote', order.tipoCabecote)}
+            ${detailItem('Qtd. cabeçotes', order.quantidadeCabecotes)}
             <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
             <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
             <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
@@ -631,6 +1047,7 @@
           </div>
         </div>
         <div class="order-values">
+          ${renderDetailedValueItems(order)}
           <span><strong>Total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
           <span><strong>Entrada</strong><span class="money-value">${formatCurrency(order.valorEntrada)}</span></span>
           <span class="${paymentSummaryClass}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
@@ -642,6 +1059,7 @@
         ${budgetDetails}
         ${withdrawalDetails}
         ${paymentDetails}
+        ${renderExternalPartsSummary(order)}
         ${notesDetails}
         <div class="card-actions service-card-actions">
           <div class="card-actions-group card-actions-flow">
@@ -673,11 +1091,10 @@
             <button class="btn btn-danger" type="button" data-action="delete" data-id="${escapeHtml(order.id)}">Excluir</button>
           </div>
         </div>
-      </div>`
-      : '';
+      </div>`;
 
     return `
-      <article class="order-card ${late ?'is-late' : ''} ${waitingApproval ?'waiting-approval' : ''} ${expanded ?'is-expanded' : ''}" data-id="${escapeHtml(order.id)}" data-os-id="${escapeHtml(order.id)}">
+      <article class="order-card ${late ?'is-late' : ''} ${waitingApproval ?'waiting-approval' : ''} ${expanded ?'is-expanded' : ''}" data-id="${escapeHtml(orderId)}" data-os-id="${escapeHtml(orderId)}">
         <div class="order-card-head">
           <div>
             ${labelCheckbox}
@@ -687,7 +1104,8 @@
           ${lateBadge}
         </div>
         <div class="order-summary-grid">
-          <span><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</span>
+          <span><strong>Veículo/modelo</strong>${escapeHtml(vehicleSummary)}</span>
+          <span><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</span>
           <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
           <span><strong>Total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
           <span class="${paymentSummaryClass}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
@@ -697,7 +1115,7 @@
             <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
             <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
           </div>
-          <button class="btn btn-secondary btn-details-toggle" type="button" data-action="details" data-id="${escapeHtml(order.id)}">${expanded ?'Ocultar detalhes' : 'Ver detalhes'}</button>
+            <button class="btn btn-secondary btn-details-toggle" type="button" data-action="toggle-details" data-order-id="${escapeHtml(orderId)}" aria-expanded="${expanded ?'true' : 'false'}">${expanded ?'Ocultar detalhes' : 'Ver detalhes'}</button>
         </div>
         ${detailsHtml}
       </article>
@@ -708,13 +1126,13 @@
     if (!list) return;
     const orders = getVisibleServiceOrders();
 
-    if (openOrderId && !orders.some(function (order) { return order.id === openOrderId; })) {
+    if (openOrderId && !orders.some(function (order) { return String(order.id) === openOrderId; })) {
       openOrderId = '';
     }
 
-    const visibleIds = new Set(orders.map(function (order) { return order.id; }));
+    const visibleIds = new Set(orders.map(function (order) { return String(order.id); }));
     Array.from(selectedLabelOrderIds).forEach(function (id) {
-      if (!visibleIds.has(id)) selectedLabelOrderIds.delete(id);
+      if (!visibleIds.has(String(id))) selectedLabelOrderIds.delete(id);
     });
 
     if (ordersResultCount) {
@@ -727,6 +1145,30 @@
     list.innerHTML = orders.length
       ?orders.map(renderOrderCard).join('')
       : `<div class="empty-state">${labelsModeActive ?'Nenhuma peça na oficina disponível para etiqueta.' : 'Nenhuma ordem encontrada para os filtros selecionados.'}</div>`;
+  }
+
+  function syncExpandedOrderCard() {
+    if (!list) return;
+    list.querySelectorAll('.order-card').forEach(function (card) {
+      const expanded = Boolean(openOrderId && card.dataset.id === openOrderId);
+      const details = card.querySelector('.order-card-details');
+      const button = card.querySelector('[data-action="toggle-details"]');
+      card.classList.toggle('is-expanded', expanded);
+      if (details) details.hidden = !expanded;
+      if (button) {
+        button.textContent = expanded ?'Ocultar detalhes' : 'Ver detalhes';
+        button.setAttribute('aria-expanded', expanded ?'true' : 'false');
+      }
+    });
+  }
+
+  function toggleOrderCardDetails(card, orderId) {
+    if (!list || !card) return;
+    const clickedId = String(orderId || card.dataset.id || '');
+    const shouldOpen = !(card.classList.contains('is-expanded') && openOrderId === clickedId);
+    openOrderId = shouldOpen ?clickedId : '';
+    syncExpandedOrderCard();
+    if (shouldOpen) scrollToOpenOrder(clickedId);
   }
 
   function updateOrderStatus(order, status) {
@@ -742,7 +1184,12 @@
     showAppMessage('Status atualizado.');
   }
 
-  if (list) {
+  let ordersListEventsReady = false;
+
+  function setupOrdersListEvents() {
+    if (!list || ordersListEventsReady) return;
+    ordersListEventsReady = true;
+
     list.addEventListener('change', function (event) {
       const checkbox = event.target.closest('input[data-label-select]');
       if (!checkbox) return;
@@ -756,15 +1203,17 @@
     });
 
     list.addEventListener('click', function (event) {
-      const button = event.target.closest('button[data-action]');
-      if (!button) return;
-      if (button.dataset.action === 'details') {
-        const nextOpenId = openOrderId === button.dataset.id ?'' : button.dataset.id;
-        openOrderId = nextOpenId;
-        renderOrders();
-        if (nextOpenId) scrollToOpenOrder(nextOpenId);
+      const toggleButton = event.target.closest('[data-action="toggle-details"]');
+      if (toggleButton && list.contains(toggleButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const card = toggleButton.closest('.order-card');
+        toggleOrderCardDetails(card, toggleButton.dataset.orderId);
         return;
       }
+
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
 
@@ -1177,6 +1626,7 @@
       });
     }
     renderOrders();
+    setupOrdersListEvents();
   }
 
   if (clientSearch) {

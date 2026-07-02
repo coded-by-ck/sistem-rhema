@@ -47,9 +47,22 @@
           <h2>Dados do veículo e peça</h2>
         </div>
         <div class="form-grid">
-          <label>Carro<input name="carro" type="text" required></label>
+          <label>Marca<input name="marca" type="text" required></label>
+          <label>Modelo<input name="modelo" type="text" required></label>
           <label>Ano<input name="ano" type="number" min="1900" max="2100"></label>
           <label>Motor<input name="motor" type="text"></label>
+          <label>Quantidade de válvulas<input name="quantidadeValvulas" type="text" placeholder="8V, 16V, 24V..."></label>
+          <label>Tipo de cabeçote<input name="tipoCabecote" type="text" placeholder="Simples, duplo..."></label>
+          <label>Quantidade de cabeçotes<input name="quantidadeCabecotes" type="number" min="0" step="1" placeholder="1"></label>
+          <label>Serviço<input name="tipoServico" type="text" placeholder="Plaina, solda, teste..." required></label>
+          <label>Valor do serviço da retífica<input name="valorServicoRetifica" type="number" min="0" step="0.01"></label>
+          <p id="suggestedPriceMessage" class="suggested-price-message full-width" hidden>Preço preenchido automaticamente com base no histórico. Você pode alterar se necessário.</p>
+          <div class="discount-box full-width">
+            <button class="btn btn-secondary discount-toggle" type="button" id="toggleServiceDiscount" data-action="toggle-discount">Aplicar desconto de 5%</button>
+            <p>O desconto não será aplicado sobre peças externas.</p>
+            <input name="descontoServicoAtivo" type="hidden" value="false">
+            <input name="descontoServicoPercentual" type="hidden" value="5">
+          </div>
           <label>Peça/Cabeçote<input name="peca" type="text" required></label>
         </div>
       </section>
@@ -80,7 +93,7 @@
         </div>
       </section>
 
-      <section class="form-section">
+      <section class="form-section collapsible-section" data-collapsible-section="orcamento" data-default-open="false">
         <div class="form-section-title">
           <span>04</span>
           <h2>Orçamento e aprovação</h2>
@@ -105,7 +118,18 @@
           <h2>Pagamento</h2>
         </div>
         <div class="form-grid">
-          <label>Valor total<input name="valorTotal" type="number" min="0" step="0.01" required></label>
+          <div class="external-parts full-width">
+            <div class="external-parts-head">
+              <h3>Peças externas</h3>
+              <button class="btn btn-secondary external-part-add" type="button" id="addExternalPart" data-action="add-external-part">Adicionar peça externa</button>
+            </div>
+            <div id="externalPartsList" class="external-parts-list"></div>
+            <p class="helper-text">Peças externas entram no total final sem desconto.</p>
+          </div>
+          <label>Subtotal peças externas<input name="subtotalPecasExternas" type="number" min="0" step="0.01" readonly></label>
+          <label>Desconto no serviço<input name="valorDescontoServico" type="number" min="0" step="0.01" readonly></label>
+          <label>Serviço com desconto<input name="valorServicoComDesconto" type="number" min="0" step="0.01" readonly></label>
+          <label>Valor total<input name="valorTotal" type="number" min="0" step="0.01" required readonly></label>
           <label>Valor de entrada<input name="valorEntrada" type="number" min="0" step="0.01" value="0"></label>
           <label>Valor restante<input id="valorRestante" name="valorRestante" type="text" readonly></label>
           <label>Status do pagamento

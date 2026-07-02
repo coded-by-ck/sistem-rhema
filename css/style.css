@@ -911,6 +911,75 @@ tbody tr:hover {
   line-height: 1.2;
 }
 
+.collapsible-toggle {
+  width: 100%;
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapsible-toggle:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.78);
+  outline-offset: 3px;
+}
+
+.collapsible-arrow {
+  display: inline-grid;
+  place-items: center;
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(96, 165, 250, 0.26);
+  border-radius: var(--radius);
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+  font-size: 0.9rem;
+  transition: transform 0.22s ease, background 0.22s ease, border-color 0.22s ease;
+}
+
+.collapsible-section.is-open > .collapsible-toggle .collapsible-arrow,
+.collapsible-section.is-open > .form-section-title .collapsible-arrow {
+  transform: rotate(180deg);
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(220, 38, 38, 0.13);
+}
+
+.collapsible-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.24s ease;
+}
+
+.collapsible-section.is-open > .collapsible-content {
+  overflow: visible;
+}
+
+.nested-collapsible {
+  border: 1px solid rgba(75, 85, 99, 0.42);
+  border-radius: var(--radius);
+  background: rgba(7, 9, 11, 0.28);
+  padding: 0;
+}
+
+.nested-collapsible-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px 14px;
+  color: #bfdbfe;
+  font-size: 0.88rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.nested-collapsible .collapsible-content {
+  padding-inline: 14px;
+}
+
+.nested-collapsible.is-open .collapsible-content {
+  padding-bottom: 14px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -926,6 +995,92 @@ tbody tr:hover {
 
 .full-width {
   grid-column: 1 / -1;
+}
+
+.discount-box,
+.external-parts {
+  position: relative;
+  z-index: 10;
+  transform: translateZ(32px);
+  border: 1px solid rgba(75, 85, 99, 0.42);
+  border-radius: var(--radius);
+  background: rgba(7, 9, 11, 0.34);
+  padding: 14px;
+}
+
+.discount-box p,
+.external-parts p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.suggested-price-message {
+  margin: -4px 0 2px;
+  color: #bfdbfe;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.inline-actions,
+.external-parts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.external-parts-head {
+  position: relative;
+  z-index: 11;
+  transform: translateZ(36px);
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.discount-toggle,
+.external-part-add,
+[data-action="toggle-discount"],
+[data-action="add-external-part"] {
+  position: relative;
+  z-index: 12;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translateZ(48px);
+}
+
+.discount-toggle:hover,
+.external-part-add:hover,
+[data-action="toggle-discount"]:hover,
+[data-action="add-external-part"]:hover {
+  transform: translateY(-2px) translateZ(56px);
+}
+
+.discount-toggle:active,
+.external-part-add:active,
+[data-action="toggle-discount"]:active,
+[data-action="add-external-part"]:active {
+  transform: translateY(1px) translateZ(48px);
+}
+
+.external-parts-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.external-parts-list {
+  display: grid;
+  gap: 10px;
+}
+
+.external-part-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  border-top: 1px solid rgba(75, 85, 99, 0.34);
+  padding-top: 10px;
 }
 
 .form-actions {
@@ -1718,7 +1873,7 @@ tbody tr:hover {
 
 .order-values {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 6px;
   margin-top: 7px;
 }
@@ -1745,6 +1900,9 @@ tbody tr:hover {
 }
 
 .order-card-footer {
+  position: relative;
+  z-index: 4;
+  transform: translateZ(24px);
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
@@ -1753,6 +1911,10 @@ tbody tr:hover {
 }
 
 .btn-details-toggle {
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
+  transform: translateZ(28px);
   min-height: 34px;
   padding: 7px 10px;
 }
@@ -1760,9 +1922,17 @@ tbody tr:hover {
 .order-card-details {
   display: grid;
   gap: 12px;
+  max-height: none;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
   margin-top: 10px;
   border-top: 1px solid rgba(42, 47, 55, 0.72);
   padding-top: 10px;
+}
+
+.order-card-details[hidden] {
+  display: none;
 }
 
 .order-card.is-expanded .order-info-grid {
@@ -2045,6 +2215,10 @@ tbody tr:hover {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .external-part-row {
     grid-template-columns: 1fr;
   }
 
