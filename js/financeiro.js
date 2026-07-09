@@ -30,7 +30,7 @@
     const message = [
       `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
       `Consta um valor pendente de ${formatCurrency(getOrderRemaining(order))} referente à OS nº ${order.numeroOs},`,
-      `dos serviços ${getOrderServicesText(order)} na peça/cabeçote ${order.peca || 'não informado'} do veículo ${order.carro || 'não informado'}.`,
+      `dos serviços ${getOrderServicesDetailedText(order)} na peça/cabeçote ${order.peca || 'não informado'} do veículo ${order.carro || 'não informado'}.`,
       'Podemos combinar a regularização?'
     ].join(' ');
 
@@ -233,7 +233,7 @@
       return [
         order.numeroOs || '',
         order.cliente || '',
-        getOrderServicesText(order),
+        getOrderServicesDetailedText(order),
         formatCurrency(order.valorTotal),
         formatCurrency(order.valorEntrada),
         formatCurrency(getOrderRemaining(order)),
@@ -270,7 +270,7 @@
         order.cliente || '',
         order.telefone || '',
         order.carro || '',
-        getOrderServicesText(order),
+        getOrderServicesDetailedText(order),
         formatCurrency(order.valorTotal),
         formatCurrency(getOrderRemaining(order)),
         order.statusServico || '',
@@ -334,7 +334,7 @@
       currencyForExcel(order.valorServicoComDesconto),
       currencyForExcel(order.subtotalPecasExternas),
       order.peca || '',
-      getOrderServicesText(order),
+      getOrderServicesDetailedText(order),
       currencyForExcel(order.valorTotal),
       currencyForExcel(order.valorOrcado),
       currencyForExcel(order.valorEntrada),
@@ -475,7 +475,7 @@
         order.cliente || '',
         textForExcel(order.telefone),
         order.carro || '',
-        getOrderServicesText(order),
+        getOrderServicesDetailedText(order),
         currencyForExcel(order.valorTotal),
         currencyForExcel(order.valorEntrada),
         currencyForExcel(getOrderRemaining(order)),
@@ -528,7 +528,7 @@
       return [
         textForExcel(order.numeroOs),
         order.cliente || '',
-        getOrderServicesText(order),
+        getOrderServicesDetailedText(order),
         currencyForExcel(order.valorTotal),
         currencyForExcel(order.valorEntrada),
         currencyForExcel(getOrderRemaining(order)),
@@ -625,7 +625,8 @@
       geradoEm: new Date().toISOString(),
       totalRegistros: orders.length,
       ordens: orders,
-      configuracoesEmpresa: getCompanySettings()
+      configuracoesEmpresa: getCompanySettings(),
+      tabelaPrecos: RetificaStorage.getPriceTable ?RetificaStorage.getPriceTable() : []
     };
 
     downloadJson(getBackupFileName(), backup);
@@ -649,6 +650,7 @@
 
         RetificaStorage.updateOrders(data.ordens);
         if (data.configuracoesEmpresa) RetificaStorage.saveCompanySettings(data.configuracoesEmpresa);
+        if (Array.isArray(data.tabelaPrecos) && RetificaStorage.savePriceTable) RetificaStorage.savePriceTable(data.tabelaPrecos);
         renderFinance();
         applyCompanyBrand();
         showBackupMessage('Backup restaurado com sucesso.');

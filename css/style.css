@@ -2499,6 +2499,155 @@ textarea:focus {
   padding-left: 10px;
 }
 
+.service-name-field {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid rgba(96, 110, 130, 0.66);
+  border-radius: var(--radius);
+  background: #11161c;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.38);
+  padding: 6px;
+}
+
+.autocomplete-list[hidden],
+.suggested-price-message[hidden] {
+  display: none !important;
+}
+
+.autocomplete-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.autocomplete-item small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.autocomplete-heading {
+  color: #93c5fd;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 4px 8px 2px;
+  text-transform: uppercase;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.is-active {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.service-price-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.service-price-actions .suggested-price-message {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.price-table-section details {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-summary span {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  background: rgba(37, 99, 235, 0.16);
+  color: #bfdbfe;
+  font-weight: 800;
+}
+
+.settings-summary h2 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.price-table-tools,
+.price-table-form,
+.price-table-list {
+  margin-top: 14px;
+}
+
+.price-table-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.price-table-list {
+  display: grid;
+  gap: 8px;
+}
+
+.price-table-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgba(96, 110, 130, 0.36);
+  padding: 10px 0;
+}
+
+.price-table-row strong,
+.price-table-row span {
+  display: block;
+}
+
+.price-table-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.price-table-row.is-inactive {
+  opacity: 0.55;
+}
+
+.price-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .order-card {
   padding: 15px;
 }

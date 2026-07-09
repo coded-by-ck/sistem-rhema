@@ -25,16 +25,24 @@
   const addWorkshopServiceButton = document.getElementById('addWorkshopService');
   const workshopServicesList = document.getElementById('workshopServicesList');
   const workshopServiceName = document.getElementById('workshopServiceName');
+  const workshopServiceSuggestions = document.getElementById('workshopServiceSuggestions');
+  const workshopServiceChargeType = document.getElementById('workshopServiceChargeType');
+  const workshopServiceQuantity = document.getElementById('workshopServiceQuantity');
+  const workshopServiceQuantityLabel = document.getElementById('workshopServiceQuantityLabel');
   const workshopServiceValue = document.getElementById('workshopServiceValue');
+  const workshopServiceSubtotal = document.getElementById('workshopServiceSubtotal');
   const workshopServiceNote = document.getElementById('workshopServiceNote');
+  const workshopServicePriceId = document.getElementById('workshopServicePriceId');
   const addExternalPartButton = document.getElementById('addExternalPart');
   const externalPartsList = document.getElementById('externalPartsList');
   let selectedClientKey = '';
   let openOrderId = '';
   let activeQuickFilter = '';
   let labelsModeActive = false;
-  let autoPriceApplied = false;
-  let workshopServicePriceManuallyEdited = false;
+  let selectedPriceRecord = null;
+  let autocompleteSuggestions = [];
+  let autocompleteIndex = -1;
+  let serviceSelectedByAutocomplete = false;
   const selectedLabelOrderIds = new Set();
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
@@ -70,6 +78,7 @@
     const message = [
       `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
       `Já avaliamos sua peça/cabeçote referente à OS nº ${order.numeroOs}.`,
+      `Serviços da retífica: ${getOrderServicesDetailedText(order)}.`,
       `O orçamento ficou em ${formatCurrency(budgetValue)}.`,
       'Podemos seguir com a execução do serviço?'
     ].join(' ');
@@ -102,50 +111,131 @@
     return [marca, modelo].filter(Boolean).join(' ').trim() || fallback || '';
   }
 
-  function getPriceCombinationFromForm(serviceName) {
-    return {
-      quantidadeValvulas: getFirstFormValue(['quantidadeValvulas', 'qtdValvulas']),
-      servico: String(serviceName || (workshopServiceName && workshopServiceName.value) || '').trim()
-    };
+  function normalizeChargeType(value) {
+    return RetificaStorage.getChargeTypes && RetificaStorage.getChargeTypes().includes(value) ?value : 'servico';
   }
 
-  function isPriceCombinationComplete(combination) {
-    const fields = combination || getPriceCombinationFromForm();
-    return ['quantidadeValvulas', 'servico'].every(function (field) {
-      return String(fields[field] || '').trim() !== '';
-    });
+  function getCurrentPriceCategory() {
+    return RetificaStorage.resolvePriceCategory ?RetificaStorage.resolvePriceCategory({
+      marca: getFormValue('marca'),
+      modelo: getFormValue('modelo'),
+      carro: getVehicleName(getFormValue('marca'), getFormValue('modelo'), getFormValue('carro')),
+      motor: getFormValue('motor'),
+      peca: getFormValue('peca'),
+      tipoCabecote: getFormValue('tipoCabecote')
+    }) : '';
+  }
+
+  function calculateServiceSubtotal(quantity, unitValue) {
+    return Math.max(toNumber(quantity) || 1, 1) * toNumber(unitValue);
+  }
+
+  function isQuantityNeeded(type) {
+    return ['unidade', 'cabecote', 'jogo'].includes(normalizeChargeType(type));
+  }
+
+  function getChargeTypeLabel(type) {
+    return {
+      servico: 'Servico',
+      unidade: 'Unidade',
+      cabecote: 'Cabecote',
+      jogo: 'Jogo'
+    }[normalizeChargeType(type)] || 'Servico';
+  }
+
+  function getWorkshopServiceDraft() {
+    const type = normalizeChargeType(workshopServiceChargeType && workshopServiceChargeType.value);
+    const quantity = isQuantityNeeded(type) ?Math.max(toNumber(workshopServiceQuantity && workshopServiceQuantity.value) || 1, 1) : 1;
+    const unitValue = toNumber(workshopServiceValue && workshopServiceValue.value);
+    const subtotal = calculateServiceSubtotal(quantity, unitValue);
+    return {
+      id: window.crypto && window.crypto.randomUUID ?window.crypto.randomUUID() : String(Date.now()),
+      nome: String(workshopServiceName && workshopServiceName.value || '').trim(),
+      categoriaPreco: selectedPriceRecord ?selectedPriceRecord.categoria : getCurrentPriceCategory(),
+      tipoCobranca: type,
+      quantidade: quantity,
+      valorUnitario: unitValue,
+      subtotal,
+      valor: subtotal,
+      observacao: String(workshopServiceNote && workshopServiceNote.value || '').trim(),
+      origemPreco: selectedPriceRecord ?'tabela' : 'manual',
+      precoTabelaId: selectedPriceRecord ?selectedPriceRecord.id : ''
+    };
   }
 
   function getWorkshopServicesFromForm() {
     if (!workshopServicesList) return [];
     return Array.from(workshopServicesList.querySelectorAll('[data-workshop-service]')).map(function (row) {
+      const type = normalizeChargeType(row.querySelector('[data-service-field="tipoCobranca"]').value);
+      const quantity = isQuantityNeeded(type) ?Math.max(toNumber(row.querySelector('[data-service-field="quantidade"]').value) || 1, 1) : 1;
+      const unitValue = toNumber(row.querySelector('[data-service-field="valorUnitario"]').value);
+      const subtotal = calculateServiceSubtotal(quantity, unitValue);
       return {
+        id: row.dataset.serviceId || '',
         nome: String(row.querySelector('[data-service-field="nome"]').value || '').trim(),
-        valor: toNumber(row.querySelector('[data-service-field="valor"]').value),
-        observacao: String(row.querySelector('[data-service-field="observacao"]').value || '').trim()
+        categoriaPreco: String(row.querySelector('[data-service-field="categoriaPreco"]').value || '').trim(),
+        tipoCobranca: type,
+        quantidade,
+        valorUnitario: unitValue,
+        subtotal,
+        valor: subtotal,
+        observacao: String(row.querySelector('[data-service-field="observacao"]').value || '').trim(),
+        origemPreco: row.querySelector('[data-service-field="origemPreco"]').value === 'tabela' ?'tabela' : 'manual',
+        precoTabelaId: String(row.querySelector('[data-service-field="precoTabelaId"]').value || '').trim()
       };
     }).filter(function (service) {
-      return service.nome || service.valor > 0 || service.observacao;
+      return service.nome || service.subtotal > 0 || service.observacao;
     });
-  }
-
-  function saveHistoricalPriceForService(service) {
-    if (!service || toNumber(service.valor) <= 0) return;
-    RetificaStorage.updateSuggestedPrice(getPriceCombinationFromForm(service.nome), service.valor);
   }
 
   function addWorkshopServiceRow(service) {
     if (!workshopServicesList) return;
+    const type = normalizeChargeType(service && service.tipoCobranca);
+    const quantity = Math.max(toNumber(service && service.quantidade) || 1, 1);
+    const unitValue = service && service.valorUnitario !== undefined && service.valorUnitario !== null && service.valorUnitario !== ''
+      ?toNumber(service.valorUnitario)
+      : toNumber(service && service.valor);
+    const subtotal = service && service.subtotal !== undefined && service.subtotal !== null && service.subtotal !== ''
+      ?toNumber(service.subtotal)
+      : calculateServiceSubtotal(quantity, unitValue);
     const row = document.createElement('div');
     row.className = 'external-part-row workshop-service-row';
     row.dataset.workshopService = 'true';
+    row.dataset.serviceId = service && service.id || '';
     row.innerHTML = `
-      <label>Servi?o<input data-service-field="nome" type="text" value="${escapeHtml(service && service.nome || '')}"></label>
-      <label>Valor<input data-service-field="valor" type="number" min="0" step="0.01" value="${service && service.valor ?toNumber(service.valor) : ''}"></label>
-      <label>Observa??o<input data-service-field="observacao" type="text" value="${escapeHtml(service && service.observacao || '')}"></label>
+      <label>Servico<input data-service-field="nome" type="text" value="${escapeHtml(service && service.nome || '')}"></label>
+      <label>Tipo
+        <select data-service-field="tipoCobranca">
+          <option value="servico" ${type === 'servico' ?'selected' : ''}>Servico</option>
+          <option value="unidade" ${type === 'unidade' ?'selected' : ''}>Unidade</option>
+          <option value="cabecote" ${type === 'cabecote' ?'selected' : ''}>Cabecote</option>
+          <option value="jogo" ${type === 'jogo' ?'selected' : ''}>Jogo</option>
+        </select>
+      </label>
+      <label>Qtd.<input data-service-field="quantidade" type="number" min="1" step="1" value="${quantity}"></label>
+      <label>Valor un.<input data-service-field="valorUnitario" type="number" min="0" step="0.01" value="${unitValue ?unitValue.toFixed(2) : ''}"></label>
+      <label>Subtotal<input data-service-field="subtotal" type="number" min="0" step="0.01" readonly value="${subtotal ?subtotal.toFixed(2) : ''}"></label>
+      <label>Observacao<input data-service-field="observacao" type="text" value="${escapeHtml(service && service.observacao || '')}"></label>
+      <input data-service-field="categoriaPreco" type="hidden" value="${escapeHtml(service && service.categoriaPreco || '')}">
+      <input data-service-field="origemPreco" type="hidden" value="${escapeHtml(service && service.origemPreco || 'manual')}">
+      <input data-service-field="precoTabelaId" type="hidden" value="${escapeHtml(service && service.precoTabelaId || '')}">
       <button class="btn btn-danger" type="button" data-remove-workshop-service>Remover</button>
     `;
     workshopServicesList.appendChild(row);
+    updateWorkshopServiceRowSubtotal(row);
+  }
+
+  function updateWorkshopServiceRowSubtotal(row) {
+    if (!row) return;
+    const typeField = row.querySelector('[data-service-field="tipoCobranca"]');
+    const quantityField = row.querySelector('[data-service-field="quantidade"]');
+    const valueField = row.querySelector('[data-service-field="valorUnitario"]');
+    const subtotalField = row.querySelector('[data-service-field="subtotal"]');
+    const type = normalizeChargeType(typeField && typeField.value);
+    const quantity = isQuantityNeeded(type) ?Math.max(toNumber(quantityField && quantityField.value) || 1, 1) : 1;
+    const subtotal = calculateServiceSubtotal(quantity, valueField && valueField.value);
+    if (quantityField && !isQuantityNeeded(type)) quantityField.value = '1';
+    if (subtotalField) subtotalField.value = subtotal ?subtotal.toFixed(2) : '';
   }
 
   function getExternalPartsFromForm() {
@@ -181,7 +271,7 @@
     if (!form) return;
     const servicosRetifica = getWorkshopServicesFromForm();
     const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) {
-      return sum + toNumber(service.valor);
+      return sum + toNumber(service.subtotal || service.valor);
     }, 0);
     const pecasExternas = getExternalPartsFromForm();
     const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
@@ -206,44 +296,149 @@
     }
   }
 
-  function setSuggestedPriceMessage(visible) {
-    if (suggestedPriceMessage) suggestedPriceMessage.hidden = !visible;
+  function setSuggestedPriceMessage(message) {
+    if (!suggestedPriceMessage) return;
+    suggestedPriceMessage.textContent = message || '';
+    suggestedPriceMessage.hidden = !message;
   }
 
-  function applyHistoricalServicePrice() {
-    if (!form || !workshopServiceValue || workshopServicePriceManuallyEdited) {
-      setSuggestedPriceMessage(false);
-      return;
-    }
-    const combination = getPriceCombinationFromForm();
-    if (!isPriceCombinationComplete(combination)) {
-      if (autoPriceApplied) {
-        workshopServiceValue.value = '';
-        autoPriceApplied = false;
-        updateRemainingPreview();
-      }
-      setSuggestedPriceMessage(false);
-      return;
-    }
-    const currentValue = String(workshopServiceValue.value || '').trim();
-    if (currentValue && !autoPriceApplied) {
-      setSuggestedPriceMessage(false);
-      return;
-    }
-    const suggested = RetificaStorage.findSuggestedPrice(combination);
-    if (!suggested || toNumber(suggested.valorServicoRetifica) <= 0) {
-      if (autoPriceApplied) {
-        workshopServiceValue.value = '';
-        autoPriceApplied = false;
-        updateRemainingPreview();
-      }
-      setSuggestedPriceMessage(false);
-      return;
-    }
-    workshopServiceValue.value = toNumber(suggested.valorServicoRetifica).toFixed(2);
-    autoPriceApplied = true;
-    setSuggestedPriceMessage(true);
+  function updateServiceDraftUi() {
+    const type = normalizeChargeType(workshopServiceChargeType && workshopServiceChargeType.value);
+    const quantityNeeded = isQuantityNeeded(type);
+    if (workshopServiceQuantityLabel) workshopServiceQuantityLabel.hidden = !quantityNeeded;
+    if (workshopServiceQuantity && !quantityNeeded) workshopServiceQuantity.value = '1';
+    const subtotal = calculateServiceSubtotal(workshopServiceQuantity && workshopServiceQuantity.value, workshopServiceValue && workshopServiceValue.value);
+    if (workshopServiceSubtotal) workshopServiceSubtotal.value = subtotal ?subtotal.toFixed(2) : '';
+
+    const serviceName = String(workshopServiceName && workshopServiceName.value || '').trim();
+    if (!serviceName) setSuggestedPriceMessage('');
     updateRemainingPreview();
+  }
+
+  function applyPriceRecord(record) {
+    if (!record) return;
+    selectedPriceRecord = record;
+    serviceSelectedByAutocomplete = true;
+    if (workshopServiceName) workshopServiceName.value = record.servico || '';
+    if (workshopServiceChargeType) workshopServiceChargeType.value = normalizeChargeType(record.tipoCobranca);
+    if (workshopServiceQuantity) workshopServiceQuantity.value = isQuantityNeeded(record.tipoCobranca) ?workshopServiceQuantity.value || '1' : '1';
+    if (workshopServiceValue) {
+      workshopServiceValue.value = record.precoPadrao === null || record.precoPadrao === undefined || record.precoPadrao === ''
+        ?''
+        : toNumber(record.precoPadrao).toFixed(2);
+    }
+    if (workshopServicePriceId) workshopServicePriceId.value = record.id;
+    setSuggestedPriceMessage(record.precoPadrao === null || record.precoPadrao === undefined || record.precoPadrao === ''
+      ?'Preco padrao nao cadastrado.'
+      :'Preco preenchido pela tabela padrao. Voce pode alterar somente nesta OS.');
+    closeAutocomplete();
+    updateServiceDraftUi();
+    const nextField = isQuantityNeeded(record.tipoCobranca) ?workshopServiceQuantity : workshopServiceValue;
+    if (nextField) nextField.focus();
+  }
+
+  function resetSelectedPriceRecord() {
+    selectedPriceRecord = null;
+    serviceSelectedByAutocomplete = false;
+    if (workshopServicePriceId) workshopServicePriceId.value = '';
+  }
+
+  function renderAutocomplete() {
+    if (!workshopServiceSuggestions) return;
+    if (!autocompleteSuggestions.length) {
+      closeAutocomplete();
+      return;
+    }
+    workshopServiceSuggestions.hidden = false;
+    let lastGroup = '';
+    workshopServiceSuggestions.innerHTML = autocompleteSuggestions.map(function (record, index) {
+      const price = record.precoPadrao === null || record.precoPadrao === undefined || record.precoPadrao === ''
+        ?'Sem preco'
+        : formatCurrency(record.precoPadrao);
+      const group = record.grupoResultado || 'categoria';
+      const heading = group !== lastGroup
+        ?`<div class="autocomplete-heading">${group === 'outros' ?'Outros resultados' : group === 'generico' ?'Resultados genericos' : 'Categoria atual'}</div>`
+        : '';
+      lastGroup = group;
+      const valves = record.quantidadeValvulas ?` · ${record.quantidadeValvulas}` : '';
+      return `${heading}<button type="button" class="autocomplete-item ${index === autocompleteIndex ?'is-active' : ''}" data-suggestion-index="${index}">
+        <span>${escapeHtml(record.servico)}</span>
+        <small>${escapeHtml(record.categoria)}${escapeHtml(valves)} · ${escapeHtml(getChargeTypeLabel(record.tipoCobranca))} · ${escapeHtml(price)}</small>
+      </button>`;
+    }).join('');
+  }
+
+  function openAutocomplete() {
+    if (!workshopServiceName || !RetificaStorage.searchPriceTableServices) return;
+    const query = workshopServiceName.value;
+    autocompleteSuggestions = RetificaStorage.searchPriceTableServices(query, getCurrentPriceCategory(), getFormValue('quantidadeValvulas')).slice(0, 8);
+    autocompleteIndex = autocompleteSuggestions.length ?0 : -1;
+    renderAutocomplete();
+  }
+
+  function closeAutocomplete() {
+    autocompleteSuggestions = [];
+    autocompleteIndex = -1;
+    if (workshopServiceSuggestions) {
+      workshopServiceSuggestions.hidden = true;
+      workshopServiceSuggestions.innerHTML = '';
+    }
+  }
+
+  function selectAutocompleteIndex(index) {
+    const record = autocompleteSuggestions[index];
+    if (!record) return;
+    applyPriceRecord(record);
+  }
+
+  function focusNextServiceField(fromField) {
+    const type = normalizeChargeType(workshopServiceChargeType && workshopServiceChargeType.value);
+    if (fromField === workshopServiceName || fromField === workshopServiceChargeType) {
+      const nextField = isQuantityNeeded(type) ?workshopServiceQuantity : workshopServiceValue;
+      if (nextField) nextField.focus();
+      return;
+    }
+    if (fromField === workshopServiceQuantity) {
+      if (workshopServiceValue) workshopServiceValue.focus();
+      return;
+    }
+    if (fromField === workshopServiceValue) {
+      if (workshopServiceNote) workshopServiceNote.focus();
+    }
+  }
+
+  function handleServiceFieldEnter(field, event) {
+    if (event.key !== 'Enter') return;
+    if (field === workshopServiceName && workshopServiceSuggestions && !workshopServiceSuggestions.hidden) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    if (field === workshopServiceNote) {
+      addWorkshopService();
+      return;
+    }
+    focusNextServiceField(field);
+  }
+
+  function saveCurrentDraftAsPriceDefault() {
+    const draft = getWorkshopServiceDraft();
+    if (!draft.nome || draft.valorUnitario <= 0) return;
+    const updatingExisting = Boolean(selectedPriceRecord);
+    const category = selectedPriceRecord
+      ?selectedPriceRecord.categoria
+      : (getCurrentPriceCategory() || prompt('Categoria para tabela de precos:', draft.categoriaPreco || 'Geral') || '').trim();
+    if (!category) return;
+    const record = RetificaStorage.upsertPriceTableRecord({
+      id: selectedPriceRecord ?selectedPriceRecord.id : '',
+      categoria: category,
+      quantidadeValvulas: getFormValue('quantidadeValvulas'),
+      servico: draft.nome,
+      tipoCobranca: draft.tipoCobranca,
+      precoPadrao: draft.valorUnitario,
+      ativo: true
+    });
+    applyPriceRecord(record);
+    showAppMessage(updatingExisting ?'Preco padrao atualizado.' : 'Servico salvo na tabela de precos.');
   }
 
   function setCollapsibleState(section, open) {
@@ -374,7 +569,7 @@
     const marca = String(data.get('marca') || '').trim();
     const modelo = String(data.get('modelo') || '').trim();
     const servicosRetifica = getWorkshopServicesFromForm();
-    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) { return sum + toNumber(service.valor); }, 0);
+    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) { return sum + toNumber(service.subtotal || service.valor); }, 0);
     const tipoServico = servicosRetifica.map(function (service) { return service.nome; }).filter(Boolean).join(', ');
     const pecasExternas = getExternalPartsFromForm();
     const descontoServicoAtivo = data.get('descontoServicoAtivo') === 'true';
@@ -451,21 +646,6 @@
     };
   }
 
-  function getPriceCombinationFromOrder(order, serviceName) {
-    return {
-      quantidadeValvulas: order && (order.quantidadeValvulas || order.qtdValvulas),
-      servico: serviceName || (order && (order.tipoServico || order.servico))
-    };
-  }
-
-  function saveHistoricalServicePrice(order) {
-    if (!order) return;
-    getOrderWorkshopServices(order).forEach(function (service) {
-      if (toNumber(service.valor) <= 0) return;
-      RetificaStorage.saveSuggestedPrice(getPriceCombinationFromOrder(order, service.nome), service.valor, true);
-    });
-  }
-
   function toggleServiceDiscount() {
     if (!form || !form.descontoServicoAtivo) return;
     form.descontoServicoAtivo.value = form.descontoServicoAtivo.value === 'true' ?'false' : 'true';
@@ -480,21 +660,18 @@
 
   function addWorkshopService() {
     if (!workshopServiceName || !workshopServiceValue) return;
-    const service = {
-      nome: String(workshopServiceName.value || '').trim(),
-      valor: toNumber(workshopServiceValue.value),
-      observacao: String(workshopServiceNote && workshopServiceNote.value || '').trim()
-    };
-    if (!service.nome && service.valor <= 0 && !service.observacao) return;
+    const service = getWorkshopServiceDraft();
+    if (!service.nome && service.subtotal <= 0 && !service.observacao) return;
     addWorkshopServiceRow(service);
-    saveHistoricalPriceForService(service);
     workshopServiceName.value = '';
+    if (workshopServiceChargeType) workshopServiceChargeType.value = 'servico';
+    if (workshopServiceQuantity) workshopServiceQuantity.value = '1';
     workshopServiceValue.value = '';
+    if (workshopServiceSubtotal) workshopServiceSubtotal.value = '';
     if (workshopServiceNote) workshopServiceNote.value = '';
-    autoPriceApplied = false;
-    workshopServicePriceManuallyEdited = false;
-    setSuggestedPriceMessage(false);
-    updateRemainingPreview();
+    resetSelectedPriceRecord();
+    setSuggestedPriceMessage('');
+    updateServiceDraftUi();
     if (workshopServiceName) workshopServiceName.focus();
   }
 
@@ -591,33 +768,78 @@
       if (workshopServicesList) workshopServicesList.addEventListener(eventName, updateRemainingPreview);
       if (externalPartsList) externalPartsList.addEventListener(eventName, updateRemainingPreview);
     });
-    ['quantidadeValvulas', 'qtdValvulas'].forEach(function (fieldName) {
+    ['marca', 'modelo', 'motor', 'peca', 'tipoCabecote', 'quantidadeValvulas'].forEach(function (fieldName) {
       if (!form.elements[fieldName]) return;
       form.elements[fieldName].addEventListener('input', function () {
-        applyHistoricalServicePrice();
-      });
-      form.elements[fieldName].addEventListener('change', function () {
-        applyHistoricalServicePrice();
+        if (workshopServiceName && document.activeElement === workshopServiceName) openAutocomplete();
       });
     });
     if (workshopServiceName) {
       workshopServiceName.addEventListener('input', function () {
-        if (autoPriceApplied && workshopServiceValue) workshopServiceValue.value = '';
-        autoPriceApplied = false;
-        workshopServicePriceManuallyEdited = false;
-        applyHistoricalServicePrice();
+        resetSelectedPriceRecord();
+        setSuggestedPriceMessage('');
+        openAutocomplete();
+        updateServiceDraftUi();
       });
-      workshopServiceName.addEventListener('change', applyHistoricalServicePrice);
+      workshopServiceName.addEventListener('focus', openAutocomplete);
+      workshopServiceName.addEventListener('keydown', function (event) {
+        if (!workshopServiceSuggestions || workshopServiceSuggestions.hidden) return;
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          autocompleteIndex = Math.min(autocompleteIndex + 1, autocompleteSuggestions.length - 1);
+          renderAutocomplete();
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          autocompleteIndex = Math.max(autocompleteIndex - 1, 0);
+          renderAutocomplete();
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+          selectAutocompleteIndex(autocompleteIndex);
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+          closeAutocomplete();
+          return;
+        }
+      });
     }
+    if (workshopServiceSuggestions) {
+      workshopServiceSuggestions.addEventListener('mousedown', function (event) {
+        event.preventDefault();
+        const button = event.target.closest('[data-suggestion-index]');
+        if (!button) return;
+        selectAutocompleteIndex(Number(button.dataset.suggestionIndex));
+      });
+    }
+    [workshopServiceChargeType, workshopServiceQuantity, workshopServiceValue].forEach(function (field) {
+      if (!field) return;
+      field.addEventListener('input', updateServiceDraftUi);
+      field.addEventListener('change', updateServiceDraftUi);
+    });
     if (workshopServiceValue) {
       workshopServiceValue.addEventListener('input', function () {
-        workshopServicePriceManuallyEdited = true;
-        autoPriceApplied = false;
-        setSuggestedPriceMessage(false);
+        if (serviceSelectedByAutocomplete && selectedPriceRecord) {
+          setSuggestedPriceMessage('Preco alterado somente nesta OS. Use o botao para atualizar o padrao.');
+        }
       });
     }
-    applyHistoricalServicePrice();
+    [workshopServiceName, workshopServiceChargeType, workshopServiceQuantity, workshopServiceValue, workshopServiceNote].forEach(function (field) {
+      if (!field) return;
+      field.addEventListener('keydown', function (event) {
+        handleServiceFieldEnter(field, event);
+      });
+    });
+    updateServiceDraftUi();
     document.addEventListener('click', function (event) {
+      if (workshopServiceSuggestions && !event.target.closest('.service-name-field')) closeAutocomplete();
+
       const discountButton = event.target.closest('[data-action="toggle-discount"], #toggleServiceDiscount');
       if (discountButton && form.contains(discountButton)) {
         event.preventDefault();
@@ -639,9 +861,23 @@
         event.preventDefault();
         event.stopPropagation();
         addWorkshopService();
+        return;
       }
+
     });
     if (workshopServicesList) {
+      workshopServicesList.addEventListener('input', function (event) {
+        const row = event.target.closest('[data-workshop-service]');
+        if (!row) return;
+        updateWorkshopServiceRowSubtotal(row);
+        updateRemainingPreview();
+      });
+      workshopServicesList.addEventListener('change', function (event) {
+        const row = event.target.closest('[data-workshop-service]');
+        if (!row) return;
+        updateWorkshopServiceRowSubtotal(row);
+        updateRemainingPreview();
+      });
       workshopServicesList.addEventListener('click', function (event) {
         const button = event.target.closest('[data-remove-workshop-service]');
         if (!button) return;
@@ -679,11 +915,9 @@
 
       if (existingOrder) {
         RetificaStorage.updateOrder(existingOrder.id, order);
-        saveHistoricalServicePrice(order);
         setFlashMessage('OS atualizada com sucesso.');
       } else {
-        const savedOrder = RetificaStorage.saveOrder(order);
-        saveHistoricalServicePrice(savedOrder);
+        RetificaStorage.saveOrder(order);
         setFlashMessage('OS salva com sucesso.');
       }
 
@@ -1004,7 +1238,8 @@
       <h4>Serviços da retífica</h4>
       <div class="order-info-grid">
         ${services.map(function (service) {
-          return `<span><strong>${escapeHtml(service.nome || 'Serviço não informado')}</strong><span class="money-value">${formatCurrency(service.valor)}</span>${service.observacao ?`<small>${escapeHtml(service.observacao)}</small>` : ''}</span>`;
+          const line = typeof formatWorkshopServiceLine === 'function' ?formatWorkshopServiceLine(service) : formatCurrency(service.subtotal || service.valor);
+          return `<span><strong>${escapeHtml(service.nome || 'Serviço não informado')}</strong><span class="money-value">${escapeHtml(line)}</span>${service.observacao ?`<small>${escapeHtml(service.observacao)}</small>` : ''}</span>`;
         }).join('')}
       </div>
     </div>`;

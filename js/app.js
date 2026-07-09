@@ -88,26 +88,65 @@ function getOrderSearchText(order) {
   return [number, `OS-${number}`, `OS-DEMO-${oldDemoNumber}`].join(' ');
 }
 
+function formatKnownServiceName(value) {
+  const original = String(value || '').trim();
+  const key = original
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {
+    'banho quimico': 'Banho químico',
+    pistao: 'Pistão',
+    'retifica de valvula / sede': 'Retífica de válvula / sede',
+    descarbonizacao: 'Descarbonização',
+    'troca de selo': 'Troca de selo'
+  }[key] || original;
+}
+
 function getOrderWorkshopServices(order) {
   const services = Array.isArray(order && order.servicosRetifica) ?order.servicosRetifica : [];
   const normalized = services.map(function (service) {
+    const quantity = Number(service && service.quantidade || 1);
+    const unitValue = service && service.valorUnitario !== undefined && service.valorUnitario !== null && service.valorUnitario !== ''
+      ?Number(service.valorUnitario)
+      : Number(service && service.valor || 0);
+    const subtotal = service && service.subtotal !== undefined && service.subtotal !== null && service.subtotal !== ''
+      ?Number(service.subtotal)
+      : (Number.isFinite(quantity) ?quantity : 1) * (Number.isFinite(unitValue) ?unitValue : 0);
     return {
-      nome: String(service && (service.nome || service.servico || service.tipoServico) || '').trim(),
-      valor: Number(service && service.valor || 0),
-      observacao: String(service && service.observacao || '').trim()
+      id: String(service && service.id || ''),
+      nome: formatKnownServiceName(service && (service.nome || service.servico || service.tipoServico)),
+      categoriaPreco: String(service && service.categoriaPreco || '').trim(),
+      tipoCobranca: String(service && service.tipoCobranca || 'servico').trim() || 'servico',
+      quantidade: Number.isFinite(quantity) && quantity > 0 ?quantity : 1,
+      valorUnitario: Number.isFinite(unitValue) ?unitValue : 0,
+      subtotal: Number.isFinite(subtotal) ?subtotal : 0,
+      valor: Number.isFinite(subtotal) ?subtotal : 0,
+      observacao: String(service && service.observacao || '').trim(),
+      origemPreco: service && service.origemPreco === 'tabela' ?'tabela' : 'manual',
+      precoTabelaId: String(service && service.precoTabelaId || '').trim()
     };
   }).filter(function (service) {
-    return service.nome || service.valor > 0 || service.observacao;
+    return service.nome || service.subtotal > 0 || service.observacao;
   });
   if (normalized.length) return normalized;
 
-  const legacyName = String(order && (order.servico || order.tipoServico) || '').trim();
+  const legacyName = formatKnownServiceName(order && (order.servico || order.tipoServico));
   const legacyValue = Number(order && order.valorServicoRetifica || 0);
   if (!legacyName && !legacyValue) return [];
   return [{
     nome: legacyName || 'Servi?o n?o informado',
+    categoriaPreco: '',
+    tipoCobranca: 'servico',
+    quantidade: 1,
+    valorUnitario: Number.isFinite(legacyValue) ?legacyValue : 0,
+    subtotal: Number.isFinite(legacyValue) ?legacyValue : 0,
     valor: Number.isFinite(legacyValue) ?legacyValue : 0,
-    observacao: ''
+    observacao: '',
+    origemPreco: 'manual',
+    precoTabelaId: ''
   }];
 }
 
@@ -118,22 +157,46 @@ function getOrderServicesText(order) {
     : 'N?o informado';
 }
 
+function getOrderServicesDetailedText(order) {
+  const services = getOrderWorkshopServices(order);
+  return services.length
+    ?services.map(function (service) {
+      const name = service.nome || 'Servico nao informado';
+      return `${name} - ${formatWorkshopServiceLine(service)}`;
+    }).join('; ')
+    : 'Nao informado';
+}
+
 function getOrderServicesTotal(order) {
   const subtotal = Number(order && order.subtotalServicosRetifica || 0);
   if (Number.isFinite(subtotal) && subtotal > 0) return subtotal;
   return getOrderWorkshopServices(order).reduce(function (sum, service) {
-    const value = Number(service.valor || 0);
+    const value = Number(service.subtotal || service.valor || 0);
     return sum + (Number.isFinite(value) ?value : 0);
   }, 0);
+}
+
+function formatWorkshopServiceLine(service) {
+  const quantity = Number(service && service.quantidade || 1);
+  const unitValue = Number(service && service.valorUnitario || 0);
+  const subtotal = Number(service && (service.subtotal || service.valor) || 0);
+  const safeQuantity = Number.isFinite(quantity) && quantity > 0 ?quantity : 1;
+  const safeUnitValue = Number.isFinite(unitValue) ?unitValue : 0;
+  const safeSubtotal = Number.isFinite(subtotal) ?subtotal : 0;
+  if (safeQuantity > 1 || service.tipoCobranca === 'unidade' || service.tipoCobranca === 'cabecote' || service.tipoCobranca === 'jogo') {
+    return `${safeQuantity} x ${formatCurrency(safeUnitValue)} = ${formatCurrency(safeSubtotal)}`;
+  }
+  return formatCurrency(safeSubtotal);
 }
 
 function renderWorkshopServicesItems(order) {
   const services = getOrderWorkshopServices(order);
   if (!services.length) return '';
   return services.map(function (service) {
-    const value = Number(service.valor || 0);
+    const value = Number(service.subtotal || service.valor || 0);
     const price = Number.isFinite(value) && value > 0 ?formatCurrency(value) : 'Sem valor';
-    return `<div class="item"><strong>${escapeHtml(service.nome || 'Servi?o n?o informado')}</strong>${price}${service.observacao ?`<br>${escapeHtml(service.observacao)}` : ''}</div>`;
+    const line = Number.isFinite(value) && value > 0 ?formatWorkshopServiceLine(service) : price;
+    return `<div class="item"><strong>${escapeHtml(service.nome || 'Servi?o n?o informado')}</strong>${escapeHtml(line)}${service.observacao ?`<br>${escapeHtml(service.observacao)}` : ''}</div>`;
   }).join('');
 }
 

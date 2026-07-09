@@ -5,6 +5,27 @@
   const DEMO_FLAG = 'retificaOS.demoLoaded';
   const COMPANY_KEY = 'retificaOS.companySettings';
   const SUGGESTED_PRICES_KEY = 'retifica_precos_sugeridos';
+  const PRICE_TABLE_KEY = 'retificaOS.priceTable';
+  const CHARGE_TYPES = ['servico', 'unidade', 'cabecote', 'jogo'];
+
+  const INITIAL_PRICE_TABLE = [
+    { categoria: 'Scania 113', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 300 },
+    { categoria: 'Scania 113', servico: 'Retificar sedes', tipoCobranca: 'unidade', precoPadrao: 15 },
+    { categoria: 'Scania 113', servico: 'Frisar', tipoCobranca: 'servico', precoPadrao: null },
+    { categoria: 'Perkins', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 350 },
+    { categoria: 'Perkins', servico: 'Montagem', tipoCobranca: 'servico', precoPadrao: 150 },
+    { categoria: 'Cummins', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 500 },
+    { categoria: 'Scania 124', servico: 'Plaina', tipoCobranca: 'unidade', precoPadrao: 100 },
+    { categoria: 'Scania 124', servico: 'Trocar guia', tipoCobranca: 'servico', precoPadrao: 50 },
+    { categoria: 'Scania 124', servico: 'Retificar sede', tipoCobranca: 'unidade', precoPadrao: 50 },
+    { categoria: 'Scania 124', servico: 'Esmerilhar', tipoCobranca: 'unidade', precoPadrao: 50 },
+    { categoria: 'Scania 124', servico: 'Troca de anel', tipoCobranca: 'servico', precoPadrao: 50 },
+    { categoria: 'Scania 124', servico: 'Frisar', tipoCobranca: 'servico', precoPadrao: 50 },
+    { categoria: 'Scania 124', servico: 'Banho químico', tipoCobranca: 'servico', precoPadrao: 40 },
+    { categoria: 'Scania 124', servico: 'Pistão', tipoCobranca: 'servico', precoPadrao: 40 },
+    { categoria: 'Scania 124', servico: 'Trocar selo', tipoCobranca: 'unidade', precoPadrao: 10 }
+  ];
+  const REMOVED_INITIAL_PRICE_IDS = ['preco-inicial-16', 'preco-inicial-17', 'preco-inicial-18', 'preco-inicial-19', 'preco-inicial-20', 'preco-inicial-21', 'preco-inicial-22'];
 
   const DEFAULT_COMPANY = {
     nome: 'Retífica OS',
@@ -43,6 +64,17 @@
     return Number.isFinite(number) ?number : 0;
   }
 
+  function nullableNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ?number : null;
+  }
+
+  function createId(prefix) {
+    if (window.crypto && window.crypto.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   function normalizeTextForKey(value) {
     const text = String(value == null ?'' : value)
       .normalize('NFD')
@@ -65,6 +97,96 @@
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
     return text || 'nao-informado';
+  }
+
+  function formatKnownServiceName(value) {
+    const original = String(value || '').trim();
+    const key = normalizeTextForKey(original);
+    const names = {
+      'banho quimico': 'Banho químico',
+      pistao: 'Pistão',
+      'retifica de valvula / sede': 'Retífica de válvula / sede',
+      descarbonizacao: 'Descarbonização',
+      'troca de selo': 'Troca de selo'
+    };
+    return names[key] || original;
+  }
+
+  function normalizePriceTableRecord(record, index) {
+    const source = record || {};
+    const tipoCobranca = CHARGE_TYPES.includes(source.tipoCobranca) ?source.tipoCobranca : 'servico';
+    return {
+      id: String(source.id || createId(`preco-${index || 0}`)),
+      categoria: String(source.categoria || '').trim() || 'Geral',
+      quantidadeValvulas: String(source.quantidadeValvulas || source.qtdValvulas || '').trim(),
+      servico: formatKnownServiceName(source.servico || source.nome),
+      tipoCobranca,
+      precoPadrao: nullableNumber(source.precoPadrao),
+      ativo: source.ativo !== false,
+      atualizadoEm: source.atualizadoEm || ''
+    };
+  }
+
+  function normalizePriceTable(records) {
+    return (Array.isArray(records) ?records : []).map(normalizePriceTableRecord).filter(function (record) {
+      return record.servico;
+    });
+  }
+
+  function getDefaultPriceTable() {
+    return INITIAL_PRICE_TABLE.map(function (record, index) {
+      return normalizePriceTableRecord({
+        ...record,
+        id: `preco-inicial-${index + 1}`,
+        ativo: true,
+        atualizadoEm: ''
+      }, index);
+    });
+  }
+
+  function readPriceTable() {
+    const current = read(PRICE_TABLE_KEY, null);
+    if (Array.isArray(current)) {
+      const normalized = normalizePriceTable(current);
+      const migrated = normalized.filter(function (record) {
+        return !(REMOVED_INITIAL_PRICE_IDS.includes(record.id) && record.categoria === 'Fiat / Palio');
+      });
+      if (migrated.length !== normalized.length) write(PRICE_TABLE_KEY, migrated);
+      return migrated;
+    }
+    const initial = getDefaultPriceTable();
+    write(PRICE_TABLE_KEY, initial);
+    return initial;
+  }
+
+  function normalizeChargeType(value) {
+    return CHARGE_TYPES.includes(value) ?value : 'servico';
+  }
+
+  function normalizeWorkshopService(service) {
+    const source = service || {};
+    const nome = formatKnownServiceName(source.nome || source.servico || source.tipoServico);
+    const tipoCobranca = normalizeChargeType(source.tipoCobranca);
+    const quantidade = safeNumber(source.quantidade) > 0 ?safeNumber(source.quantidade) : 1;
+    const unitValue = source.valorUnitario !== undefined && source.valorUnitario !== null && source.valorUnitario !== ''
+      ?safeNumber(source.valorUnitario)
+      : safeNumber(source.valor);
+    const subtotal = source.subtotal !== undefined && source.subtotal !== null && source.subtotal !== ''
+      ?safeNumber(source.subtotal)
+      : quantidade * unitValue;
+    return {
+      id: String(source.id || createId('servico-os')),
+      nome,
+      categoriaPreco: String(source.categoriaPreco || source.categoria || '').trim(),
+      tipoCobranca,
+      quantidade,
+      valorUnitario: unitValue,
+      subtotal,
+      valor: subtotal,
+      observacao: String(source.observacao || '').trim(),
+      origemPreco: source.origemPreco === 'tabela' ?'tabela' : 'manual',
+      precoTabelaId: String(source.precoTabelaId || source.priceTableId || '').trim()
+    };
   }
 
   function getCombinationSource(data) {
@@ -98,18 +220,14 @@
     const source = order || {};
     const services = Array.isArray(source.servicosRetifica) ?source.servicosRetifica : [];
     const normalized = services.map(function (service) {
-      return {
-        nome: String(service && (service.nome || service.servico || service.tipoServico) || '').trim(),
-        valor: safeNumber(service && service.valor),
-        observacao: String(service && service.observacao || '').trim()
-      };
+      return normalizeWorkshopService(service);
     }).filter(function (service) {
-      return service.nome || service.valor > 0 || service.observacao;
+      return service.nome || service.subtotal > 0 || service.observacao;
     });
 
     if (normalized.length) return normalized;
 
-    const legacyName = String(source.servico || source.tipoServico || '').trim();
+    const legacyName = formatKnownServiceName(source.servico || source.tipoServico);
     const subtotalPecasExternas = normalizeExternalParts(source.pecasExternas).reduce(function (sum, part) {
       return sum + safeNumber(part.valor);
     }, 0);
@@ -118,9 +236,17 @@
       : Math.max(safeNumber(source.valorTotal) - subtotalPecasExternas, 0);
     if (!legacyName && legacyValue <= 0) return [];
     return [{
+      id: createId('servico-os'),
       nome: legacyName || 'Servi?o n?o informado',
+      categoriaPreco: '',
+      tipoCobranca: 'servico',
+      quantidade: 1,
+      valorUnitario: legacyValue,
+      subtotal: legacyValue,
       valor: legacyValue,
-      observacao: ''
+      observacao: '',
+      origemPreco: 'manual',
+      precoTabelaId: ''
     }];
   }
 
@@ -141,7 +267,7 @@
   function calculateOrderValues(order) {
     const servicosRetifica = normalizeWorkshopServices(order);
     const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) {
-      return sum + safeNumber(service.valor);
+      return sum + safeNumber(service.subtotal || service.valor);
     }, 0);
     const pecasExternas = normalizeExternalParts(order.pecasExternas);
     const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
@@ -336,6 +462,124 @@
     normalizeValvesForPriceKey: normalizeValvesForKey,
 
     normalizeServiceForPriceKey: normalizeServiceForKey,
+
+    getPriceTableKey() {
+      return PRICE_TABLE_KEY;
+    },
+
+    getChargeTypes() {
+      return CHARGE_TYPES.slice();
+    },
+
+    getPriceTable() {
+      return readPriceTable();
+    },
+
+    savePriceTable(records) {
+      const normalized = normalizePriceTable(records);
+      write(PRICE_TABLE_KEY, normalized);
+      return normalized;
+    },
+
+    findPriceTableRecordById(id) {
+      const recordId = String(id || '');
+      return this.getPriceTable().find(function (record) {
+        return record.id === recordId;
+      }) || null;
+    },
+
+    upsertPriceTableRecord(record) {
+      const table = this.getPriceTable();
+      const normalized = normalizePriceTableRecord({
+        ...(record || {}),
+        id: record && record.id ?record.id : createId('preco'),
+        atualizadoEm: new Date().toISOString()
+      });
+      const index = table.findIndex(function (item) {
+        return item.id === normalized.id;
+      });
+      if (index >= 0) table[index] = normalized;
+      else table.push(normalized);
+      write(PRICE_TABLE_KEY, table);
+      return normalized;
+    },
+
+    setPriceTableRecordActive(id, active) {
+      const table = this.getPriceTable();
+      const index = table.findIndex(function (record) { return record.id === id; });
+      if (index < 0) return null;
+      table[index] = {
+        ...table[index],
+        ativo: Boolean(active),
+        atualizadoEm: new Date().toISOString()
+      };
+      write(PRICE_TABLE_KEY, table);
+      return table[index];
+    },
+
+    resolvePriceCategory(data) {
+      const source = data || {};
+      const text = normalizeTextForKey([
+        source.categoria,
+        source.marca,
+        source.modelo,
+        source.carro,
+        source.motor,
+        source.peca,
+        source.tipoCabecote
+      ].filter(Boolean).join(' ')).replace(/[^a-z0-9]+/g, ' ');
+      const categories = this.getPriceTable().map(function (record) { return record.categoria; }).filter(Boolean);
+      return categories.find(function (category) {
+        return normalizeTextForKey(category).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean).every(function (piece) {
+          return text.includes(piece);
+        });
+      }) || '';
+    },
+
+    searchPriceTableServices(query, category, quantidadeValvulas) {
+      const prepared = String(query || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (prepared.length < 1) return [];
+      const preferredCategory = normalizeTextForKey(category || '');
+      const preferredValves = normalizeValvesForKey(quantidadeValvulas || '');
+      const genericCategories = ['geral', 'generico', 'padrao'];
+      const matching = this.getPriceTable().filter(function (record) {
+        return record.ativo !== false && normalizeTextForKey(record.servico).includes(prepared);
+      });
+
+      function valveScore(record) {
+        const recordValves = normalizeValvesForKey(record.quantidadeValvulas || '');
+        if (!record.quantidadeValvulas) return 1;
+        return preferredValves && recordValves === preferredValves ?2 : 0;
+      }
+
+      function sortByPriority(a, b) {
+        return valveScore(b) - valveScore(a) || a.servico.localeCompare(b.servico);
+      }
+
+      const exactCategory = preferredCategory ?matching.filter(function (record) {
+        return normalizeTextForKey(record.categoria) === preferredCategory && valveScore(record) > 0;
+      }).sort(sortByPriority) : [];
+      if (exactCategory.length) return exactCategory.map(function (record) {
+        return { ...record, grupoResultado: 'categoria' };
+      });
+
+      const generic = matching.filter(function (record) {
+        return genericCategories.includes(normalizeTextForKey(record.categoria)) && valveScore(record) > 0;
+      }).sort(sortByPriority);
+      if (generic.length) return generic.map(function (record) {
+        return { ...record, grupoResultado: 'generico' };
+      });
+
+      return matching.sort(sortByPriority).map(function (record) {
+        return { ...record, grupoResultado: preferredCategory ?'outros' : 'categoria' };
+      });
+    },
 
     generateSuggestedPriceKey: generatePriceKey,
 
