@@ -53,7 +53,7 @@
       ['Aguardando aprovação', totals.aguardandoAprovacao, orders.filter(function (order) { return order.statusServico === 'aguardando aprovação'; }).slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') || 'Nenhum orçamento pendente'],
       ['OS atrasadas', lateOrders.length, lateOrders.length ?lateOrders.slice(0, 3).map(function (order) { return order.numeroOs; }).join(', ') : 'Nenhuma OS fora do prazo'],
       ['Clientes com pendência', clientsWithPending.length, clientsWithPending.length ?clientsWithPending.slice(0, 3).map(function (order) { return order.cliente || 'Cliente sem nome'; }).join(', ') : 'Nenhum cliente pendente'],
-      ['Serviços em andamento', inProgress.length, inProgress.length ?inProgress.slice(0, 3).map(function (order) { return order.peca || order.tipoServico || order.numeroOs; }).join(', ') : 'Fila operacional zerada'],
+      ['Serviços em andamento', inProgress.length, inProgress.length ?inProgress.slice(0, 3).map(function (order) { return order.peca || getOrderServicesText(order) || order.numeroOs; }).join(', ') : 'Fila operacional zerada'],
       ['Total a receber', `<span class="money-value">${formatCurrency(totals.pendente)}</span>`, 'Pendências financeiras abertas']
     ];
 
@@ -78,7 +78,7 @@
           <td>${escapeHtml(order.numeroOs)}</td>
           <td>${escapeHtml(order.cliente || 'Cliente não informado')} ${demoBadge}</td>
           <td>${escapeHtml(order.carro || 'Não informado')}</td>
-          <td>${escapeHtml(order.tipoServico || 'Não informado')}</td>
+          <td>${escapeHtml(getOrderServicesText(order))}</td>
           <td><span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico || 'recebido')}</span> ${lateBadge}</td>
           <td><span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento || 'pendente')}</span></td>
         </tr>
@@ -104,7 +104,7 @@
 
   if (clearDemoButton) {
     clearDemoButton.addEventListener('click', function () {
-      if (!confirm('Remover apenas as OS de demonstração? As OS reais serão mantidas.')) return;
+      if (!confirm('Remover apenas as OS de demonstração?As OS reais serão mantidas.')) return;
       const removed = RetificaStorage.clearDemoOrders();
       alert(removed ?'Dados de demonstração removidos.' : 'Nenhum dado de demonstração encontrado.');
       renderDashboard();

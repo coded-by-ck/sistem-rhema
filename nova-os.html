@@ -54,29 +54,19 @@
           <label>Quantidade de válvulas<input name="quantidadeValvulas" type="text" placeholder="8V, 16V, 24V..."></label>
           <label>Tipo de cabeçote<input name="tipoCabecote" type="text" placeholder="Simples, duplo..."></label>
           <label>Quantidade de cabeçotes<input name="quantidadeCabecotes" type="number" min="0" step="1" placeholder="1"></label>
-          <label>Serviço<input name="tipoServico" type="text" placeholder="Plaina, solda, teste..." required></label>
-          <label>Valor do serviço da retífica<input name="valorServicoRetifica" type="number" min="0" step="0.01"></label>
-          <p id="suggestedPriceMessage" class="suggested-price-message full-width" hidden>Preço preenchido automaticamente com base no histórico. Você pode alterar se necessário.</p>
-          <div class="discount-box full-width">
-            <button class="btn btn-secondary discount-toggle" type="button" id="toggleServiceDiscount" data-action="toggle-discount">Aplicar desconto de 5%</button>
-            <p>O desconto não será aplicado sobre peças externas.</p>
-            <input name="descontoServicoAtivo" type="hidden" value="false">
-            <input name="descontoServicoPercentual" type="hidden" value="5">
-          </div>
-          <label>Peça/Cabeçote<input name="peca" type="text" required></label>
+          <label>Peça recebida<input name="peca" type="text" placeholder="Cabeçote, bloco, virabrequim..."></label>
         </div>
       </section>
 
       <section class="form-section">
         <div class="form-section-title">
           <span>03</span>
-          <h2>Serviço</h2>
+          <h2>Controle da OS</h2>
         </div>
         <div class="form-grid">
           <label>Número da OS<input id="numeroOs" name="numeroOs" type="text" readonly></label>
           <label>Data de entrada<input id="dataEntrada" name="dataEntrada" type="date" readonly></label>
-          <label>Tipo de serviço<input name="tipoServico" type="text" placeholder="Plainar, solda, teste..." required></label>
-          <label>Status do serviço
+          <label>Status da OS
             <select name="statusServico">
               <option value="orçamento">Orçamento</option>
               <option value="aguardando aprovação">Aguardando aprovação</option>
@@ -115,9 +105,30 @@
       <section class="form-section">
         <div class="form-section-title">
           <span>05</span>
-          <h2>Pagamento</h2>
+          <h2>Serviço e valores</h2>
         </div>
         <div class="form-grid">
+          <div class="workshop-services external-parts full-width">
+            <div class="external-parts-head">
+              <h3>Serviços da retífica</h3>
+              <button class="btn btn-secondary workshop-service-add" type="button" id="addWorkshopService" data-action="add-workshop-service">Adicionar serviço</button>
+            </div>
+            <div class="workshop-service-entry form-grid">
+              <label>Nome do serviço<input id="workshopServiceName" type="text" data-workshop-service-field="nome" placeholder="Plaina, solda, teste..."></label>
+              <label>Valor do serviço<input id="workshopServiceValue" type="number" min="0" step="0.01" data-workshop-service-field="valor"></label>
+              <label class="full-width">Observação do serviço<input id="workshopServiceNote" type="text" data-workshop-service-field="observacao" placeholder="Opcional"></label>
+            </div>
+            <p id="suggestedPriceMessage" class="suggested-price-message" hidden>Preço preenchido com base no histórico. Você pode alterar se necessário.</p>
+            <div id="workshopServicesList" class="external-parts-list workshop-services-list"></div>
+            <p class="helper-text">O desconto de 5% incide somente sobre os serviços da retífica.</p>
+          </div>
+          <label>Subtotal serviços da retífica<input name="subtotalServicosRetifica" type="number" min="0" step="0.01" readonly></label>
+          <div class="discount-box full-width">
+            <button class="btn btn-secondary discount-toggle" type="button" id="toggleServiceDiscount" data-action="toggle-discount">Aplicar desconto de 5%</button>
+            <p>O desconto não será aplicado sobre peças externas.</p>
+            <input name="descontoServicoAtivo" type="hidden" value="false">
+            <input name="descontoServicoPercentual" type="hidden" value="5">
+          </div>
           <div class="external-parts full-width">
             <div class="external-parts-head">
               <h3>Peças externas</h3>

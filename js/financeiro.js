@@ -30,7 +30,7 @@
     const message = [
       `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
       `Consta um valor pendente de ${formatCurrency(getOrderRemaining(order))} referente à OS nº ${order.numeroOs},`,
-      `do serviço ${order.tipoServico || 'não informado'} na peça/cabeçote ${order.peca || 'não informado'} do veículo ${order.carro || 'não informado'}.`,
+      `dos serviços ${getOrderServicesText(order)} na peça/cabeçote ${order.peca || 'não informado'} do veículo ${order.carro || 'não informado'}.`,
       'Podemos combinar a regularização?'
     ].join(' ');
 
@@ -233,7 +233,7 @@
       return [
         order.numeroOs || '',
         order.cliente || '',
-        order.tipoServico || '',
+        getOrderServicesText(order),
         formatCurrency(order.valorTotal),
         formatCurrency(order.valorEntrada),
         formatCurrency(getOrderRemaining(order)),
@@ -256,7 +256,7 @@
       buildPrintHeader('Relatório Financeiro'),
       '<section class="summary-grid">' + summaryItems + '</section>',
       '<h2>Pendências financeiras</h2>',
-      buildPrintTable(['OS', 'Cliente', 'Serviço', 'Total', 'Entrada', 'Restante', 'Pagamento'], pendingRows, ['11%', '22%', '23%', '11%', '11%', '11%', '11%'])
+      buildPrintTable(['OS', 'Cliente', 'Serviços', 'Total', 'Entrada', 'Restante', 'Pagamento'], pendingRows, ['11%', '22%', '23%', '11%', '11%', '11%', '11%'])
     ].join(''), 'A4');
   }
 
@@ -270,7 +270,7 @@
         order.cliente || '',
         order.telefone || '',
         order.carro || '',
-        order.tipoServico || '',
+        getOrderServicesText(order),
         formatCurrency(order.valorTotal),
         formatCurrency(getOrderRemaining(order)),
         order.statusServico || '',
@@ -280,7 +280,7 @@
 
     openPrintWindow('Lista resumida de OS', [
       buildPrintHeader('Lista resumida de OS'),
-      buildPrintTable(['OS', 'Cliente', 'Telefone', 'Carro', 'Serviço', 'Total', 'Restante', 'Status do Serviço', 'Status do Pagamento'], rows, ['10%', '16%', '13%', '12%', '16%', '8%', '8%', '9%', '8%'])
+      buildPrintTable(['OS', 'Cliente', 'Telefone', 'Carro', 'Serviços', 'Total', 'Restante', 'Status do Serviço', 'Status do Pagamento'], rows, ['10%', '16%', '13%', '12%', '16%', '8%', '8%', '9%', '8%'])
     ].join(''), 'A4 landscape');
   }
 
@@ -329,12 +329,12 @@
       order.carro || '',
       order.ano || '',
       order.motor || '',
-      currencyForExcel(order.valorServicoRetifica),
+      currencyForExcel(getOrderServicesTotal(order)),
       currencyForExcel(order.valorDescontoServico),
       currencyForExcel(order.valorServicoComDesconto),
       currencyForExcel(order.subtotalPecasExternas),
       order.peca || '',
-      order.tipoServico || '',
+      getOrderServicesText(order),
       currencyForExcel(order.valorTotal),
       currencyForExcel(order.valorOrcado),
       currencyForExcel(order.valorEntrada),
@@ -402,12 +402,12 @@
       'Carro',
       'Ano',
       'Motor',
-      'Valor do Serviço da Retífica',
+      'Subtotal Serviços da Retífica',
       'Desconto no Serviço',
       'Serviço com Desconto',
       'Peças Externas',
-      'Peça/Cabeçote',
-      'Serviço',
+      'Peça recebida',
+      'Serviços',
       'Valor Total',
       'Valor Orçado',
       'Entrada',
@@ -457,7 +457,7 @@
       'Cliente',
       'Telefone',
       'Carro',
-      'Serviço',
+      'Serviços',
       'Valor Total',
       'Entrada',
       'Restante',
@@ -475,7 +475,7 @@
         order.cliente || '',
         textForExcel(order.telefone),
         order.carro || '',
-        order.tipoServico || '',
+        getOrderServicesText(order),
         currencyForExcel(order.valorTotal),
         currencyForExcel(order.valorEntrada),
         currencyForExcel(getOrderRemaining(order)),
@@ -514,7 +514,7 @@
     const orderHeaders = [
       'Número da OS',
       'Cliente',
-      'Serviço',
+      'Serviços',
       'Valor Total',
       'Entrada',
       'Restante',
@@ -528,7 +528,7 @@
       return [
         textForExcel(order.numeroOs),
         order.cliente || '',
-        order.tipoServico || '',
+        getOrderServicesText(order),
         currencyForExcel(order.valorTotal),
         currencyForExcel(order.valorEntrada),
         currencyForExcel(getOrderRemaining(order)),
@@ -669,7 +669,7 @@
 
   function clearAllData() {
     // Limpeza total dos dados: remove todas as OS, incluindo reais e demonstração.
-    const confirmed = confirm('Tem certeza que deseja apagar todos os dados? Essa ação não pode ser desfeita.');
+    const confirmed = confirm('Tem certeza que deseja apagar todos os dados?Essa ação não pode ser desfeita.');
     if (!confirmed) return;
 
     RetificaStorage.updateOrders([]);
@@ -762,7 +762,8 @@
 
           <div class="order-info-grid">
             <span><strong>Carro</strong>${escapeHtml(order.carro || 'Não informado')}</span>
-            <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
+            <span><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</span>
+            <span><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</span>
             <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
             <span><strong>Previsão</strong>${formatDate(order.previsaoEntrega)}</span>
           </div>

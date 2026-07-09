@@ -22,6 +22,11 @@
   const editId = params.get('id') || params.get('edit');
   const suggestedPriceMessage = document.getElementById('suggestedPriceMessage');
   const toggleServiceDiscountButton = document.getElementById('toggleServiceDiscount');
+  const addWorkshopServiceButton = document.getElementById('addWorkshopService');
+  const workshopServicesList = document.getElementById('workshopServicesList');
+  const workshopServiceName = document.getElementById('workshopServiceName');
+  const workshopServiceValue = document.getElementById('workshopServiceValue');
+  const workshopServiceNote = document.getElementById('workshopServiceNote');
   const addExternalPartButton = document.getElementById('addExternalPart');
   const externalPartsList = document.getElementById('externalPartsList');
   let selectedClientKey = '';
@@ -29,7 +34,7 @@
   let activeQuickFilter = '';
   let labelsModeActive = false;
   let autoPriceApplied = false;
-  let servicePriceManuallyEdited = false;
+  let workshopServicePriceManuallyEdited = false;
   const selectedLabelOrderIds = new Set();
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
@@ -97,24 +102,50 @@
     return [marca, modelo].filter(Boolean).join(' ').trim() || fallback || '';
   }
 
-  function getPriceCombinationFromForm() {
+  function getPriceCombinationFromForm(serviceName) {
     return {
-      marca: getFirstFormValue('marca'),
-      modelo: getFirstFormValue('modelo'),
-      motor: getFirstFormValue('motor'),
       quantidadeValvulas: getFirstFormValue(['quantidadeValvulas', 'qtdValvulas']),
-      tipoCabecote: getFirstFormValue('tipoCabecote'),
-      quantidadeCabecotes: getFirstFormValue(['quantidadeCabecotes', 'qtdCabecotes']),
-      peca: getFirstFormValue(['peca', 'pecaRecebida']),
-      servico: getFirstFormValue(['tipoServico', 'servico'])
+      servico: String(serviceName || (workshopServiceName && workshopServiceName.value) || '').trim()
     };
   }
 
   function isPriceCombinationComplete(combination) {
     const fields = combination || getPriceCombinationFromForm();
-    return ['marca', 'modelo', 'motor', 'quantidadeValvulas', 'tipoCabecote', 'quantidadeCabecotes', 'peca', 'servico'].every(function (field) {
+    return ['quantidadeValvulas', 'servico'].every(function (field) {
       return String(fields[field] || '').trim() !== '';
     });
+  }
+
+  function getWorkshopServicesFromForm() {
+    if (!workshopServicesList) return [];
+    return Array.from(workshopServicesList.querySelectorAll('[data-workshop-service]')).map(function (row) {
+      return {
+        nome: String(row.querySelector('[data-service-field="nome"]').value || '').trim(),
+        valor: toNumber(row.querySelector('[data-service-field="valor"]').value),
+        observacao: String(row.querySelector('[data-service-field="observacao"]').value || '').trim()
+      };
+    }).filter(function (service) {
+      return service.nome || service.valor > 0 || service.observacao;
+    });
+  }
+
+  function saveHistoricalPriceForService(service) {
+    if (!service || toNumber(service.valor) <= 0) return;
+    RetificaStorage.updateSuggestedPrice(getPriceCombinationFromForm(service.nome), service.valor);
+  }
+
+  function addWorkshopServiceRow(service) {
+    if (!workshopServicesList) return;
+    const row = document.createElement('div');
+    row.className = 'external-part-row workshop-service-row';
+    row.dataset.workshopService = 'true';
+    row.innerHTML = `
+      <label>Servi?o<input data-service-field="nome" type="text" value="${escapeHtml(service && service.nome || '')}"></label>
+      <label>Valor<input data-service-field="valor" type="number" min="0" step="0.01" value="${service && service.valor ?toNumber(service.valor) : ''}"></label>
+      <label>Observa??o<input data-service-field="observacao" type="text" value="${escapeHtml(service && service.observacao || '')}"></label>
+      <button class="btn btn-danger" type="button" data-remove-workshop-service>Remover</button>
+    `;
+    workshopServicesList.appendChild(row);
   }
 
   function getExternalPartsFromForm() {
@@ -148,18 +179,22 @@
 
   function calculateFormValues() {
     if (!form) return;
-    const valorServicoRetifica = toNumber(getFormValue('valorServicoRetifica'));
+    const servicosRetifica = getWorkshopServicesFromForm();
+    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) {
+      return sum + toNumber(service.valor);
+    }, 0);
     const pecasExternas = getExternalPartsFromForm();
     const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
       return sum + toNumber(part.valor);
     }, 0);
     const descontoAtivo = getFormValue('descontoServicoAtivo') === 'true';
     const descontoPercentual = descontoAtivo ?5 : 0;
-    const valorDescontoServico = descontoAtivo ?valorServicoRetifica * (descontoPercentual / 100) : 0;
-    const valorServicoComDesconto = Math.max(valorServicoRetifica - valorDescontoServico, 0);
+    const valorDescontoServico = descontoAtivo ?subtotalServicosRetifica * (descontoPercentual / 100) : 0;
+    const valorServicoComDesconto = Math.max(subtotalServicosRetifica - valorDescontoServico, 0);
     const valorTotal = valorServicoComDesconto + subtotalPecasExternas;
 
     if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = String(descontoPercentual);
+    if (form.subtotalServicosRetifica) form.subtotalServicosRetifica.value = subtotalServicosRetifica.toFixed(2);
     if (form.subtotalPecasExternas) form.subtotalPecasExternas.value = subtotalPecasExternas.toFixed(2);
     if (form.valorDescontoServico) form.valorDescontoServico.value = valorDescontoServico.toFixed(2);
     if (form.valorServicoComDesconto) form.valorServicoComDesconto.value = valorServicoComDesconto.toFixed(2);
@@ -176,21 +211,21 @@
   }
 
   function applyHistoricalServicePrice() {
-    if (!form || editId || !form.valorServicoRetifica || servicePriceManuallyEdited) {
+    if (!form || !workshopServiceValue || workshopServicePriceManuallyEdited) {
       setSuggestedPriceMessage(false);
       return;
     }
     const combination = getPriceCombinationFromForm();
     if (!isPriceCombinationComplete(combination)) {
       if (autoPriceApplied) {
-        form.valorServicoRetifica.value = '';
+        workshopServiceValue.value = '';
         autoPriceApplied = false;
         updateRemainingPreview();
       }
       setSuggestedPriceMessage(false);
       return;
     }
-    const currentValue = String(form.valorServicoRetifica.value || '').trim();
+    const currentValue = String(workshopServiceValue.value || '').trim();
     if (currentValue && !autoPriceApplied) {
       setSuggestedPriceMessage(false);
       return;
@@ -198,14 +233,14 @@
     const suggested = RetificaStorage.findSuggestedPrice(combination);
     if (!suggested || toNumber(suggested.valorServicoRetifica) <= 0) {
       if (autoPriceApplied) {
-        form.valorServicoRetifica.value = '';
+        workshopServiceValue.value = '';
         autoPriceApplied = false;
         updateRemainingPreview();
       }
       setSuggestedPriceMessage(false);
       return;
     }
-    form.valorServicoRetifica.value = toNumber(suggested.valorServicoRetifica).toFixed(2);
+    workshopServiceValue.value = toNumber(suggested.valorServicoRetifica).toFixed(2);
     autoPriceApplied = true;
     setSuggestedPriceMessage(true);
     updateRemainingPreview();
@@ -338,12 +373,14 @@
     const data = new FormData(form);
     const marca = String(data.get('marca') || '').trim();
     const modelo = String(data.get('modelo') || '').trim();
+    const servicosRetifica = getWorkshopServicesFromForm();
+    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) { return sum + toNumber(service.valor); }, 0);
+    const tipoServico = servicosRetifica.map(function (service) { return service.nome; }).filter(Boolean).join(', ');
     const pecasExternas = getExternalPartsFromForm();
-    const valorServicoRetifica = toNumber(data.get('valorServicoRetifica'));
     const descontoServicoAtivo = data.get('descontoServicoAtivo') === 'true';
     const descontoServicoPercentual = descontoServicoAtivo ?toNumber(data.get('descontoServicoPercentual') || 5) : 0;
-    const valorDescontoServico = descontoServicoAtivo ?valorServicoRetifica * (descontoServicoPercentual / 100) : 0;
-    const valorServicoComDesconto = Math.max(valorServicoRetifica - valorDescontoServico, 0);
+    const valorDescontoServico = descontoServicoAtivo ?subtotalServicosRetifica * (descontoServicoPercentual / 100) : 0;
+    const valorServicoComDesconto = Math.max(subtotalServicosRetifica - valorDescontoServico, 0);
     const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) { return sum + toNumber(part.valor); }, 0);
     const valorTotal = toNumber(data.get('valorTotal'));
     const valorEntrada = Math.min(toNumber(data.get('valorEntrada')), valorTotal);
@@ -379,8 +416,10 @@
       tipoCabecote: String(data.get('tipoCabecote') || '').trim(),
       quantidadeCabecotes: String(data.get('quantidadeCabecotes') || '').trim(),
       peca: String(data.get('peca') || '').trim(),
-      tipoServico: String(data.get('tipoServico') || '').trim(),
-      valorServicoRetifica,
+      tipoServico,
+      servicosRetifica,
+      subtotalServicosRetifica,
+      valorServicoRetifica: subtotalServicosRetifica,
       descontoServicoAtivo,
       descontoServicoPercentual,
       valorDescontoServico,
@@ -412,22 +451,19 @@
     };
   }
 
-  function getPriceCombinationFromOrder(order) {
+  function getPriceCombinationFromOrder(order, serviceName) {
     return {
-      marca: order && order.marca,
-      modelo: order && order.modelo,
-      motor: order && order.motor,
       quantidadeValvulas: order && (order.quantidadeValvulas || order.qtdValvulas),
-      tipoCabecote: order && order.tipoCabecote,
-      quantidadeCabecotes: order && (order.quantidadeCabecotes || order.qtdCabecotes),
-      peca: order && (order.peca || order.pecaRecebida),
-      servico: order && (order.tipoServico || order.servico)
+      servico: serviceName || (order && (order.tipoServico || order.servico))
     };
   }
 
   function saveHistoricalServicePrice(order) {
-    if (!order || toNumber(order.valorServicoRetifica) <= 0) return;
-    RetificaStorage.saveSuggestedPrice(getPriceCombinationFromOrder(order), order.valorServicoRetifica, true);
+    if (!order) return;
+    getOrderWorkshopServices(order).forEach(function (service) {
+      if (toNumber(service.valor) <= 0) return;
+      RetificaStorage.saveSuggestedPrice(getPriceCombinationFromOrder(order, service.nome), service.valor, true);
+    });
   }
 
   function toggleServiceDiscount() {
@@ -440,6 +476,26 @@
   function addExternalPart() {
     addExternalPartRow();
     updateRemainingPreview();
+  }
+
+  function addWorkshopService() {
+    if (!workshopServiceName || !workshopServiceValue) return;
+    const service = {
+      nome: String(workshopServiceName.value || '').trim(),
+      valor: toNumber(workshopServiceValue.value),
+      observacao: String(workshopServiceNote && workshopServiceNote.value || '').trim()
+    };
+    if (!service.nome && service.valor <= 0 && !service.observacao) return;
+    addWorkshopServiceRow(service);
+    saveHistoricalPriceForService(service);
+    workshopServiceName.value = '';
+    workshopServiceValue.value = '';
+    if (workshopServiceNote) workshopServiceNote.value = '';
+    autoPriceApplied = false;
+    workshopServicePriceManuallyEdited = false;
+    setSuggestedPriceMessage(false);
+    updateRemainingPreview();
+    if (workshopServiceName) workshopServiceName.focus();
   }
 
   function updateRemainingPreview() {
@@ -472,8 +528,10 @@
     if (form.tipoCabecote) form.tipoCabecote.value = order.tipoCabecote || '';
     if (form.quantidadeCabecotes) form.quantidadeCabecotes.value = order.quantidadeCabecotes || '';
     form.peca.value = order.peca || '';
-    form.tipoServico.value = order.tipoServico || '';
-    if (form.valorServicoRetifica) form.valorServicoRetifica.value = toNumber(order.valorServicoRetifica) || '';
+    if (workshopServicesList) {
+      workshopServicesList.innerHTML = '';
+      getOrderWorkshopServices(order).forEach(addWorkshopServiceRow);
+    }
     if (form.descontoServicoAtivo) form.descontoServicoAtivo.value = order.descontoServicoAtivo ?'true' : 'false';
     if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = toNumber(order.descontoServicoPercentual) || 5;
     if (externalPartsList) {
@@ -507,12 +565,6 @@
     const existingOrder = editId ?RetificaStorage.getOrderById(editId) : null;
     const formTitle = document.getElementById('formTitle');
     const submitButton = document.getElementById('submitButton');
-    const duplicatedServiceFields = form.querySelectorAll('input[name="tipoServico"]');
-    if (duplicatedServiceFields.length > 1) {
-      duplicatedServiceFields[1].closest('label').hidden = true;
-      duplicatedServiceFields[1].disabled = true;
-      duplicatedServiceFields[1].name = 'tipoServicoDuplicado';
-    }
 
     if (editId && !existingOrder) {
       alert('OS não encontrada. Você será redirecionado para a lista de serviços.');
@@ -536,10 +588,10 @@
       form.valorTotal.addEventListener(eventName, updateRemainingPreview);
       form.valorEntrada.addEventListener(eventName, updateRemainingPreview);
       form.statusPagamento.addEventListener(eventName, updateRemainingPreview);
-      if (form.valorServicoRetifica) form.valorServicoRetifica.addEventListener(eventName, updateRemainingPreview);
+      if (workshopServicesList) workshopServicesList.addEventListener(eventName, updateRemainingPreview);
       if (externalPartsList) externalPartsList.addEventListener(eventName, updateRemainingPreview);
     });
-    ['marca', 'modelo', 'motor', 'quantidadeValvulas', 'qtdValvulas', 'tipoCabecote', 'quantidadeCabecotes', 'qtdCabecotes', 'peca', 'pecaRecebida', 'tipoServico', 'servico'].forEach(function (fieldName) {
+    ['quantidadeValvulas', 'qtdValvulas'].forEach(function (fieldName) {
       if (!form.elements[fieldName]) return;
       form.elements[fieldName].addEventListener('input', function () {
         applyHistoricalServicePrice();
@@ -548,9 +600,18 @@
         applyHistoricalServicePrice();
       });
     });
-    if (form.valorServicoRetifica) {
-      form.valorServicoRetifica.addEventListener('input', function () {
-        servicePriceManuallyEdited = true;
+    if (workshopServiceName) {
+      workshopServiceName.addEventListener('input', function () {
+        if (autoPriceApplied && workshopServiceValue) workshopServiceValue.value = '';
+        autoPriceApplied = false;
+        workshopServicePriceManuallyEdited = false;
+        applyHistoricalServicePrice();
+      });
+      workshopServiceName.addEventListener('change', applyHistoricalServicePrice);
+    }
+    if (workshopServiceValue) {
+      workshopServiceValue.addEventListener('input', function () {
+        workshopServicePriceManuallyEdited = true;
         autoPriceApplied = false;
         setSuggestedPriceMessage(false);
       });
@@ -570,8 +631,24 @@
         event.preventDefault();
         event.stopPropagation();
         addExternalPart();
+        return;
+      }
+
+      const addServiceButton = event.target.closest('[data-action="add-workshop-service"], #addWorkshopService');
+      if (addServiceButton && form.contains(addServiceButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        addWorkshopService();
       }
     });
+    if (workshopServicesList) {
+      workshopServicesList.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-remove-workshop-service]');
+        if (!button) return;
+        button.closest('[data-workshop-service]').remove();
+        updateRemainingPreview();
+      });
+    }
     if (externalPartsList) {
       externalPartsList.addEventListener('click', function (event) {
         const button = event.target.closest('[data-remove-external-part]');
@@ -707,12 +784,12 @@
           <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
           <div class="item"><strong>Ano</strong>${escapeHtml(order.ano || 'Não informado')}</div>
           <div class="item"><strong>Motor</strong>${escapeHtml(order.motor || 'Não informado')}</div>
-          <div class="item"><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</div>
+          <div class="item"><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</div>
         </section>
 
         <h2>Serviço solicitado</h2>
         <section class="grid">
-          <div class="item"><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</div>
+          <div class="item"><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</div>
           <div class="item"><strong>Status do serviço</strong>${escapeHtml(order.statusServico || 'Não informado')}</div>
           <div class="item"><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</div>
           <div class="item"><strong>Previsão de entrega</strong>${formatDate(order.previsaoEntrega)}</div>
@@ -724,6 +801,7 @@
           <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'Não informado')}</div>
         </section>
 
+        ${renderWorkshopServicesItems(order) ?`<h2>Serviços da retífica</h2><section class="grid">${renderWorkshopServicesItems(order)}</section>` : ''}
         ${renderExternalPartsItems(order) ?`<h2>Peças externas</h2><section class="grid">${renderExternalPartsItems(order)}</section>` : ''}
         ${budgetSection}
         ${withdrawalSection}
@@ -876,7 +954,7 @@
     const selectedPayment = paymentFilter ?paymentFilter.value : 'todos';
     const allOrders = RetificaStorage.getOrders();
     const filteredOrders = allOrders.filter(function (order) {
-      const searchableText = [getOrderSearchText(order), order.cliente, order.telefone, order.carro, order.peca, order.tipoServico].join(' ').toLowerCase();
+      const searchableText = [getOrderSearchText(order), order.cliente, order.telefone, order.carro, order.peca, getOrderServicesText(order)].join(' ').toLowerCase();
       const searchMatch = !search || searchableText.includes(search);
       const statusMatch = selectedStatus === 'todos'
         || (selectedStatus === 'atrasadas' ?isOrderLate(order) : order.statusServico === selectedStatus);
@@ -900,7 +978,7 @@
   }
 
   function hasDetailedValues(order) {
-    return toNumber(order.valorServicoRetifica) > 0
+    return getOrderServicesTotal(order) > 0
       || toNumber(order.subtotalPecasExternas) > 0
       || toNumber(order.valorDescontoServico) > 0;
   }
@@ -919,10 +997,23 @@
     </div>`;
   }
 
+  function renderWorkshopServicesSummary(order) {
+    const services = getOrderWorkshopServices(order);
+    if (!services.length) return '';
+    return `<div class="detail-section">
+      <h4>Serviços da retífica</h4>
+      <div class="order-info-grid">
+        ${services.map(function (service) {
+          return `<span><strong>${escapeHtml(service.nome || 'Serviço não informado')}</strong><span class="money-value">${formatCurrency(service.valor)}</span>${service.observacao ?`<small>${escapeHtml(service.observacao)}</small>` : ''}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
   function renderDetailedValueItems(order) {
     if (!hasDetailedValues(order)) return '';
     return [
-      detailMoneyItem('Serviço retífica', order.valorServicoRetifica),
+      detailMoneyItem('Subtotal serviços', getOrderServicesTotal(order)),
       detailMoneyItem('Desconto serviço', order.valorDescontoServico),
       detailMoneyItem('Serviço com desconto', order.valorServicoComDesconto),
       detailMoneyItem('Peças externas', order.subtotalPecasExternas)
@@ -1040,8 +1131,8 @@
             ${detailItem('Válvulas', order.quantidadeValvulas)}
             ${detailItem('Tipo de cabeçote', order.tipoCabecote)}
             ${detailItem('Qtd. cabeçotes', order.quantidadeCabecotes)}
-            <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
-            <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+            <span><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</span>
+            <span><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</span>
             <span><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</span>
             ${detailDateItem('Previsão', order.previsaoEntrega)}
           </div>
@@ -1059,6 +1150,7 @@
         ${budgetDetails}
         ${withdrawalDetails}
         ${paymentDetails}
+        ${renderWorkshopServicesSummary(order)}
         ${renderExternalPartsSummary(order)}
         ${notesDetails}
         <div class="card-actions service-card-actions">
@@ -1106,7 +1198,7 @@
         <div class="order-summary-grid">
           <span><strong>Veículo/modelo</strong>${escapeHtml(vehicleSummary)}</span>
           <span><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</span>
-          <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+          <span><strong>Serviço principal</strong>${escapeHtml(getOrderServicesText(order))}</span>
           <span><strong>Total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
           <span class="${paymentSummaryClass}"><strong>Restante</strong><span class="money-value">${formatCurrency(remaining)}</span></span>
         </div>
@@ -1218,7 +1310,7 @@
       if (!order) return;
 
       if (button.dataset.action === 'delete') {
-        if (confirm(`Tem certeza que deseja excluir a OS nº ${order.numeroOs}? Esta ação não pode ser desfeita.`)) {
+        if (confirm(`Tem certeza que deseja excluir a OS nº ${order.numeroOs}?Esta ação não pode ser desfeita.`)) {
           RetificaStorage.deleteOrder(order.id);
           if (openOrderId === order.id) openOrderId = '';
           renderOrders();
@@ -1419,8 +1511,8 @@
             <span><strong>Carro</strong>${escapeHtml(order.carro || 'Não informado')}</span>
             <span><strong>Ano</strong>${escapeHtml(order.ano || 'Não informado')}</span>
             <span><strong>Motor</strong>${escapeHtml(order.motor || 'Não informado')}</span>
-            <span><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</span>
-            <span><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</span>
+            <span><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</span>
+            <span><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</span>
             ${budgetGridItems}
             <span><strong>Valor total</strong><span class="money-value">${formatCurrency(order.valorTotal)}</span></span>
             <span><strong>Entrada</strong><span class="money-value">${formatCurrency(order.valorEntrada)}</span></span>

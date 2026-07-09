@@ -88,6 +88,55 @@ function getOrderSearchText(order) {
   return [number, `OS-${number}`, `OS-DEMO-${oldDemoNumber}`].join(' ');
 }
 
+function getOrderWorkshopServices(order) {
+  const services = Array.isArray(order && order.servicosRetifica) ?order.servicosRetifica : [];
+  const normalized = services.map(function (service) {
+    return {
+      nome: String(service && (service.nome || service.servico || service.tipoServico) || '').trim(),
+      valor: Number(service && service.valor || 0),
+      observacao: String(service && service.observacao || '').trim()
+    };
+  }).filter(function (service) {
+    return service.nome || service.valor > 0 || service.observacao;
+  });
+  if (normalized.length) return normalized;
+
+  const legacyName = String(order && (order.servico || order.tipoServico) || '').trim();
+  const legacyValue = Number(order && order.valorServicoRetifica || 0);
+  if (!legacyName && !legacyValue) return [];
+  return [{
+    nome: legacyName || 'Servi?o n?o informado',
+    valor: Number.isFinite(legacyValue) ?legacyValue : 0,
+    observacao: ''
+  }];
+}
+
+function getOrderServicesText(order) {
+  const services = getOrderWorkshopServices(order);
+  return services.length
+    ?services.map(function (service) { return service.nome || 'Servi?o n?o informado'; }).join(', ')
+    : 'N?o informado';
+}
+
+function getOrderServicesTotal(order) {
+  const subtotal = Number(order && order.subtotalServicosRetifica || 0);
+  if (Number.isFinite(subtotal) && subtotal > 0) return subtotal;
+  return getOrderWorkshopServices(order).reduce(function (sum, service) {
+    const value = Number(service.valor || 0);
+    return sum + (Number.isFinite(value) ?value : 0);
+  }, 0);
+}
+
+function renderWorkshopServicesItems(order) {
+  const services = getOrderWorkshopServices(order);
+  if (!services.length) return '';
+  return services.map(function (service) {
+    const value = Number(service.valor || 0);
+    const price = Number.isFinite(value) && value > 0 ?formatCurrency(value) : 'Sem valor';
+    return `<div class="item"><strong>${escapeHtml(service.nome || 'Servi?o n?o informado')}</strong>${price}${service.observacao ?`<br>${escapeHtml(service.observacao)}` : ''}</div>`;
+  }).join('');
+}
+
 function showAppMessage(message) {
   if (!message) return;
   let toast = document.getElementById('appToast');
@@ -243,7 +292,7 @@ function hasReceiptPayment(order) {
 }
 
 function hasDetailedOrderValues(order) {
-  return Number(order && order.valorServicoRetifica || 0) > 0
+  return getOrderServicesTotal(order) > 0
     || Number(order && order.valorDescontoServico || 0) > 0
     || Number(order && order.subtotalPecasExternas || 0) > 0;
 }
@@ -257,7 +306,7 @@ function getOrderValueLines(order) {
     ];
   }
   return [
-    ['Valor do serviço da retífica', order && order.valorServicoRetifica],
+    ['Subtotal serviços da retífica', getOrderServicesTotal(order)],
     ['Desconto no serviço', order && order.valorDescontoServico],
     ['Serviço com desconto', order && order.valorServicoComDesconto],
     ['Peças externas', order && order.subtotalPecasExternas],
@@ -407,8 +456,8 @@ function imprimirTermoRetirada(order) {
         <div class="item"><strong>Cliente</strong>${escapeHtml(order.cliente || 'Não informado')}</div>
         <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
         <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
-        <div class="item"><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</div>
-        <div class="item"><strong>Serviço realizado</strong>${escapeHtml(order.tipoServico || 'Não informado')}</div>
+        <div class="item"><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</div>
+        <div class="item"><strong>Serviços realizados</strong>${escapeHtml(getOrderServicesText(order))}</div>
         <div class="item"><strong>Status do serviço</strong>${escapeHtml(order.statusServico || 'Não informado')}</div>
         <div class="item"><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</div>
         <div class="item"><strong>Data de retirada</strong>${formatDate(order.dataRetirada)}</div>
@@ -489,8 +538,8 @@ function imprimirRecibo(order) {
         <div class="item"><strong>Cliente</strong>${escapeHtml(order.cliente || 'Não informado')}</div>
         <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
         <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
-        <div class="item"><strong>Peça/Cabeçote</strong>${escapeHtml(order.peca || 'Não informado')}</div>
-        <div class="item"><strong>Serviço</strong>${escapeHtml(order.tipoServico || 'Não informado')}</div>
+        <div class="item"><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</div>
+        <div class="item"><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</div>
         <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'pendente')}</div>
       </section>
       <div class="valor-pago-destaque"><span>Valor pago</span><strong>${formatCurrency(paidAmount)}</strong></div>
@@ -501,6 +550,7 @@ function imprimirRecibo(order) {
         ${optionalDateItem('Data do pagamento', order.dataPagamento)}
         ${optionalItem('Recebido por', order.recebidoPor)}
       </section>
+      ${renderWorkshopServicesItems(order) ?`<h2>Serviços da retífica</h2><section class="grid">${renderWorkshopServicesItems(order)}</section>` : ''}
       ${renderExternalPartsItems(order) ?`<h2>Peças externas</h2><section class="grid">${renderExternalPartsItems(order)}</section>` : ''}
       ${optionalNote}
       <section class="signatures">
@@ -554,8 +604,8 @@ function imprimirComprovanteRapido(order) {
       ${optionalLine('OS nº', order.numeroOs)}
       ${optionalLine('Cliente', order.cliente)}
       ${optionalLine('Telefone', order.telefone)}
-      ${optionalLine('Serviço', order.tipoServico)}
-      ${optionalLine('Peça/Cabeçote', order.peca)}
+      ${optionalLine('Serviços', getOrderServicesText(order))}
+      ${optionalLine('Peça recebida', order.peca)}
       <div class="total">Valor pago<br>${formatCurrency(paidAmount)}</div>
       ${renderOrderValueParagraphs(order)}
       ${optionalLine('Forma', order.formaPagamento)}
@@ -607,8 +657,8 @@ function imprimirEtiquetaPeca(order) {
         ${optionalRow('Telefone', order.telefone)}
         ${optionalRow('Veículo', vehicle)}
         ${optionalRow('Motor', order.motor)}
-        ${optionalRow('Peça/Cabeçote', order.peca)}
-        ${optionalRow('Serviço', order.tipoServico)}
+        ${optionalRow('Peça recebida', order.peca)}
+        ${optionalRow('Serviços', getOrderServicesText(order))}
         ${optionalRow('Entrada', formatDate(order.dataEntrada))}
         ${optionalRow('Previsão', order.previsaoEntrega ?formatDate(order.previsaoEntrega) : '')}
         ${shortNote}
@@ -658,7 +708,7 @@ function imprimirFolhaEtiquetas(orders) {
         <div class="label-body">
           ${optionalMainLine('Cliente', order.cliente, 'label-client')}
           ${optionalMainLine('Peça', order.peca)}
-          ${optionalMainLine('Serviço', order.tipoServico)}
+          ${optionalMainLine('Serviços', getOrderServicesText(order))}
           ${optionalLine('Veículo', vehicle)}
           ${optionalLine('Tel', order.telefone)}
         </div>

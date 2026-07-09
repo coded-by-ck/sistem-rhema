@@ -53,6 +53,20 @@
     return text || 'nao-informado';
   }
 
+  function normalizeValvesForKey(value) {
+    const text = normalizeTextForKey(value).replace(/\s+/g, '');
+    const match = text.match(/^(\d+)(v|valvulas?)?$/);
+    if (match) return `${match[1]}v`;
+    return text || 'nao-informado';
+  }
+
+  function normalizeServiceForKey(value) {
+    const text = normalizeTextForKey(value)
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return text || 'nao-informado';
+  }
+
   function getCombinationSource(data) {
     return data || {};
   }
@@ -60,20 +74,14 @@
   function getPriceCombinationFields(data) {
     const source = getCombinationSource(data);
     return {
-      marca: source.marca,
-      modelo: source.modelo,
-      motor: source.motor,
       quantidadeValvulas: source.quantidadeValvulas || source.qtdValvulas,
-      tipoCabecote: source.tipoCabecote,
-      quantidadeCabecotes: source.quantidadeCabecotes || source.qtdCabecotes,
-      peca: source.peca || source.pecaRecebida,
-      servico: source.servico || source.tipoServico
+      servico: source.servico || source.nomeServico || source.nome || source.tipoServico
     };
   }
 
   function isCompletePriceCombination(data) {
     const fields = getPriceCombinationFields(data);
-    return ['marca', 'modelo', 'motor', 'quantidadeValvulas', 'tipoCabecote', 'quantidadeCabecotes', 'peca', 'servico'].every(function (field) {
+    return ['quantidadeValvulas', 'servico'].every(function (field) {
       return String(fields[field] || '').trim() !== '';
     });
   }
@@ -81,15 +89,39 @@
   function generatePriceKey(data) {
     const source = getPriceCombinationFields(data);
     return [
-      source.marca,
-      source.modelo,
-      source.motor,
-      source.quantidadeValvulas,
-      source.tipoCabecote,
-      source.quantidadeCabecotes,
-      source.peca,
-      source.servico || source.tipoServico
-    ].map(normalizeTextForKey).join('|');
+      normalizeValvesForKey(source.quantidadeValvulas),
+      normalizeServiceForKey(source.servico || source.tipoServico)
+    ].join('|');
+  }
+
+  function normalizeWorkshopServices(order) {
+    const source = order || {};
+    const services = Array.isArray(source.servicosRetifica) ?source.servicosRetifica : [];
+    const normalized = services.map(function (service) {
+      return {
+        nome: String(service && (service.nome || service.servico || service.tipoServico) || '').trim(),
+        valor: safeNumber(service && service.valor),
+        observacao: String(service && service.observacao || '').trim()
+      };
+    }).filter(function (service) {
+      return service.nome || service.valor > 0 || service.observacao;
+    });
+
+    if (normalized.length) return normalized;
+
+    const legacyName = String(source.servico || source.tipoServico || '').trim();
+    const subtotalPecasExternas = normalizeExternalParts(source.pecasExternas).reduce(function (sum, part) {
+      return sum + safeNumber(part.valor);
+    }, 0);
+    const legacyValue = source.valorServicoRetifica !== undefined && source.valorServicoRetifica !== null && source.valorServicoRetifica !== ''
+      ?safeNumber(source.valorServicoRetifica)
+      : Math.max(safeNumber(source.valorTotal) - subtotalPecasExternas, 0);
+    if (!legacyName && legacyValue <= 0) return [];
+    return [{
+      nome: legacyName || 'Servi?o n?o informado',
+      valor: legacyValue,
+      observacao: ''
+    }];
   }
 
   function normalizeExternalParts(parts) {
@@ -107,23 +139,26 @@
   }
 
   function calculateOrderValues(order) {
+    const servicosRetifica = normalizeWorkshopServices(order);
+    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) {
+      return sum + safeNumber(service.valor);
+    }, 0);
     const pecasExternas = normalizeExternalParts(order.pecasExternas);
     const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
       return sum + safeNumber(part.valor);
     }, 0);
-    const hasServiceValue = order.valorServicoRetifica !== undefined && order.valorServicoRetifica !== null && order.valorServicoRetifica !== '';
-    const legacyTotal = safeNumber(order.valorTotal);
-    const valorServicoRetifica = hasServiceValue ?safeNumber(order.valorServicoRetifica) : Math.max(legacyTotal - subtotalPecasExternas, 0);
     const descontoServicoAtivo = order.descontoServicoAtivo === true || order.descontoServicoAtivo === 'true';
     const descontoServicoPercentual = descontoServicoAtivo ?safeNumber(order.descontoServicoPercentual || 5) : 0;
-    const valorDescontoServico = descontoServicoAtivo ?valorServicoRetifica * (descontoServicoPercentual / 100) : 0;
-    const valorServicoComDesconto = Math.max(valorServicoRetifica - valorDescontoServico, 0);
+    const valorDescontoServico = descontoServicoAtivo ?subtotalServicosRetifica * (descontoServicoPercentual / 100) : 0;
+    const valorServicoComDesconto = Math.max(subtotalServicosRetifica - valorDescontoServico, 0);
     const valorTotal = valorServicoComDesconto + subtotalPecasExternas;
 
     return {
+      servicosRetifica,
+      subtotalServicosRetifica,
       pecasExternas,
       subtotalPecasExternas,
-      valorServicoRetifica,
+      valorServicoRetifica: subtotalServicosRetifica,
       descontoServicoAtivo,
       descontoServicoPercentual,
       valorDescontoServico,
@@ -204,6 +239,9 @@
       tipoCabecote: String(order.tipoCabecote || '').trim(),
       quantidadeCabecotes: String(order.quantidadeCabecotes || order.qtdCabecotes || '').trim(),
       peca: order.peca || order.pecaRecebida || '',
+      tipoServico: calculatedValues.servicosRetifica.map(function (service) { return service.nome; }).filter(Boolean).join(', ') || order.tipoServico || order.servico || '',
+      servicosRetifica: calculatedValues.servicosRetifica,
+      subtotalServicosRetifica: calculatedValues.subtotalServicosRetifica,
       valorServicoRetifica: calculatedValues.valorServicoRetifica,
       descontoServicoAtivo: calculatedValues.descontoServicoAtivo,
       descontoServicoPercentual: calculatedValues.descontoServicoPercentual,
@@ -295,6 +333,10 @@
 
     normalizeTextForPriceKey: normalizeTextForKey,
 
+    normalizeValvesForPriceKey: normalizeValvesForKey,
+
+    normalizeServiceForPriceKey: normalizeServiceForKey,
+
     generateSuggestedPriceKey: generatePriceKey,
 
     isCompleteSuggestedPriceCombination: isCompletePriceCombination,
@@ -319,13 +361,7 @@
       if (value <= 0) return null;
       const fields = getPriceCombinationFields(data);
       prices[key] = {
-        marca: String(fields.marca || '').trim(),
-        modelo: String(fields.modelo || '').trim(),
-        motor: String(fields.motor || '').trim(),
         quantidadeValvulas: String(fields.quantidadeValvulas || '').trim(),
-        tipoCabecote: String(fields.tipoCabecote || '').trim(),
-        quantidadeCabecotes: String(fields.quantidadeCabecotes || '').trim(),
-        peca: String(fields.peca || '').trim(),
         servico: String(fields.servico || '').trim(),
         valorServicoRetifica: value,
         ultimaAtualizacao: new Date().toISOString(),
