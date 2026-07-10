@@ -2600,9 +2600,14 @@ textarea:focus {
   margin: 0;
 }
 
-.price-table-section details {
+.settings-panel details {
   display: grid;
   gap: 14px;
+}
+
+.settings-panel-featured {
+  border-color: rgba(96, 165, 250, 0.45);
+  box-shadow: var(--shadow-soft), 0 0 0 1px rgba(96, 165, 250, 0.08);
 }
 
 .settings-summary {
@@ -2611,6 +2616,7 @@ textarea:focus {
   gap: 12px;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
 .settings-summary::-webkit-details-marker {
@@ -2628,13 +2634,52 @@ textarea:focus {
   font-weight: 800;
 }
 
+.settings-summary div {
+  display: grid;
+  gap: 3px;
+}
+
 .settings-summary h2 {
   margin: 0;
   font-size: 1.02rem;
 }
 
+.settings-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.settings-subsection {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid rgba(96, 110, 130, 0.32);
+  padding-top: 14px;
+}
+
+.settings-subsection .form-section-title {
+  margin-bottom: 0;
+}
+
+.settings-subsection .form-section-title h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.settings-save-row {
+  border-top: 1px solid rgba(96, 110, 130, 0.32);
+  padding-top: 14px;
+}
+
+.price-table-header {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
 .price-table-tools,
 .price-table-form,
+.price-table-editor,
 .price-table-list {
   margin-top: 14px;
 }
@@ -2643,6 +2688,44 @@ textarea:focus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
+  align-items: end;
+}
+
+.price-table-editor {
+  border: 1px solid rgba(96, 110, 130, 0.42);
+  border-radius: var(--radius);
+  background: rgba(7, 9, 11, 0.24);
+  padding: 14px;
+}
+
+.price-table-editor[hidden] {
+  display: none;
+}
+
+.price-table-editor-head {
+  margin-bottom: 12px;
+}
+
+.price-table-editor-head h3,
+.price-table-editor-head p {
+  margin: 0;
+}
+
+.price-table-editor-head p {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.checkbox-line {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.checkbox-line input {
+  width: auto;
 }
 
 .price-table-list {
@@ -2651,9 +2734,9 @@ textarea:focus {
 }
 
 .price-table-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   border-top: 1px solid rgba(96, 110, 130, 0.36);
   padding: 10px 0;
@@ -2667,6 +2750,11 @@ textarea:focus {
 .price-table-row span {
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.price-table-meta {
+  text-align: right;
+  min-width: 110px;
 }
 
 .price-table-row.is-inactive {
@@ -2997,6 +3085,15 @@ textarea:focus {
   .external-part-row {
     gap: 8px;
     padding-top: 10px;
+  }
+
+  .price-table-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .price-table-meta {
+    text-align: left;
   }
 
   .orders-grid,

@@ -165,6 +165,7 @@
       servico: formatKnownServiceName(source.servico || source.nome),
       tipoCobranca,
       precoPadrao: nullableNumber(source.precoPadrao),
+      observacao: String(source.observacao || '').trim(),
       ativo: source.ativo !== false,
       atualizadoEm: source.atualizadoEm || ''
     };

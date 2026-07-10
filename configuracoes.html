@@ -24,55 +24,28 @@
   <main class="app-main">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Empresa</p>
-        <h1>Configurações da empresa</h1>
+        <p class="eyebrow">Administração</p>
+        <h1>Configurações</h1>
       </div>
     </header>
 
     <form id="companySettingsForm" class="os-form">
-      <section class="form-section">
-        <div class="form-section-title"><span>01</span><h2>Identidade</h2></div>
-        <div class="form-grid">
-          <label>Nome da empresa<input name="nome" type="text" placeholder="Retífica OS"></label>
-          <label>CNPJ<input name="cnpj" type="text" placeholder="00.000.000/0000-00"></label>
-        </div>
-      </section>
+      <section class="form-section price-table-section settings-panel settings-panel-featured">
+        <details open>
+          <summary class="settings-summary">
+            <span>01</span>
+            <div>
+              <h2>Tabela de preços</h2>
+              <p>Cadastre e ajuste os preços padrão usados como sugestão na Nova OS.</p>
+            </div>
+          </summary>
 
-      <section class="form-section">
-        <div class="form-section-title"><span>02</span><h2>Contato</h2></div>
-        <div class="form-grid">
-          <label>Telefone/WhatsApp<input name="telefone" type="tel" placeholder="(00) 00000-0000"></label>
-          <label>E-mail<input name="email" type="email" placeholder="contato@empresa.com"></label>
-          <label>Endereço<input name="endereco" type="text"></label>
-          <label>Cidade/UF<input name="cidadeUf" type="text" placeholder="São Paulo/SP"></label>
-          <label class="full-width">Horário de atendimento<input name="horario" type="text" placeholder="Segunda a sexta, 8h às 18h"></label>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-title"><span>03</span><h2>Impressão</h2></div>
-        <div class="form-grid">
-          <label class="full-width">Observações padrão da OS<textarea name="observacoesPadrao" rows="3"></textarea></label>
-          <label class="full-width">Texto do rodapé da OS<textarea name="rodapeOs" rows="3"></textarea></label>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-title"><span>04</span><h2>Logo</h2></div>
-        <div class="settings-logo-row">
-          <div class="logo-preview" id="logoPreview"><span>RO</span></div>
-          <div class="form-actions">
-            <label class="btn btn-secondary file-button">Escolher logo<input id="logoInput" type="file" accept="image/*"></label>
-            <button class="btn btn-danger" type="button" id="removeLogo">Remover logo</button>
+          <div class="price-table-header">
+            <button class="btn btn-primary" type="button" id="newPriceTableRecord">Novo preço</button>
           </div>
-        </div>
-      </section>
 
-      <section class="form-section price-table-section">
-        <details>
-          <summary class="settings-summary"><span>05</span><h2>Tabela de preços</h2></summary>
           <div class="price-table-tools">
-            <label>Categoria<input id="priceTableFilterCategory" type="search" placeholder="Scania 113"></label>
+            <label>Categoria<input id="priceTableFilterCategory" type="search" placeholder="Geral, Scania 113..."></label>
             <label>Válvulas<input id="priceTableFilterValves" type="search" placeholder="8V, 16V..."></label>
             <label>Serviço<input id="priceTableSearch" type="search" placeholder="Plaina, sede, guia..."></label>
             <label>Tipo de cobrança
@@ -84,32 +57,113 @@
                 <option value="jogo">Jogo</option>
               </select>
             </label>
+            <button class="btn btn-secondary" type="button" id="clearPriceTableFilters">Limpar filtros</button>
           </div>
-          <div class="price-table-form form-grid">
-            <input id="priceTableId" type="hidden">
-            <label>Categoria<input id="priceTableCategory" type="text" placeholder="Scania 113"></label>
-            <label>Válvulas opcional<input id="priceTableValves" type="text" placeholder="8V, 16V..."></label>
-            <label>Serviço<input id="priceTableService" type="text" placeholder="Plaina"></label>
-            <label>Tipo de cobrança
-              <select id="priceTableChargeType">
-                <option value="servico">Serviço</option>
-                <option value="unidade">Unidade</option>
-                <option value="cabecote">Cabeçote</option>
-                <option value="jogo">Jogo</option>
-              </select>
-            </label>
-            <label>Preço padrão<input id="priceTableDefaultPrice" type="number" min="0" step="0.01" placeholder="Opcional"></label>
-            <button class="btn btn-primary" type="button" id="savePriceTableRecord">Salvar preço</button>
-            <button class="btn btn-secondary" type="button" id="clearPriceTableForm">Novo</button>
+
+          <div id="priceTableEditor" class="price-table-editor" hidden>
+            <div class="price-table-editor-head">
+              <h3 id="priceTableFormTitle">Novo preço</h3>
+              <p id="priceTableFormHint">Preencha os dados para criar um novo preço padrão.</p>
+            </div>
+            <div class="price-table-form form-grid">
+              <input id="priceTableId" type="hidden">
+              <label>Categoria<input id="priceTableCategory" type="text" placeholder="Geral"></label>
+              <label>Quantidade de válvulas opcional<input id="priceTableValves" type="text" placeholder="8V, 16V..."></label>
+              <label>Serviço<input id="priceTableService" type="text" placeholder="Plaina"></label>
+              <label>Tipo de cobrança
+                <select id="priceTableChargeType">
+                  <option value="servico">Serviço</option>
+                  <option value="unidade">Unidade</option>
+                  <option value="cabecote">Cabeçote</option>
+                  <option value="jogo">Jogo</option>
+                </select>
+              </label>
+              <label>Preço padrão<input id="priceTableDefaultPrice" type="number" min="0" step="0.01" placeholder="Opcional"></label>
+              <label class="full-width">Observação opcional<input id="priceTableNote" type="text" placeholder="Uso interno"></label>
+              <label class="checkbox-line"><input id="priceTableActive" type="checkbox" checked> Ativo</label>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="button" id="savePriceTableRecord">Salvar novo preço</button>
+              <button class="btn btn-secondary" type="button" id="clearPriceTableForm">Cancelar</button>
+            </div>
           </div>
+
           <div id="priceTableList" class="price-table-list"></div>
         </details>
       </section>
 
-      <div class="form-actions sticky-actions">
-        <button class="btn btn-primary" type="submit">Salvar configurações</button>
-        <p class="report-feedback" id="settingsFeedback" aria-live="polite"></p>
-      </div>
+      <section class="form-section settings-panel">
+        <details>
+          <summary class="settings-summary">
+            <span>02</span>
+            <div>
+              <h2>Dados da empresa e impressão</h2>
+              <p>Informações usadas em documentos, recibos e impressões.</p>
+            </div>
+          </summary>
+
+          <div class="settings-subsection">
+            <div class="form-section-title"><span>2.1</span><h3>Identidade</h3></div>
+            <div class="form-grid">
+              <label>Nome da empresa<input name="nome" type="text" placeholder="Retífica OS"></label>
+              <label>CNPJ<input name="cnpj" type="text" placeholder="00.000.000/0000-00"></label>
+            </div>
+          </div>
+
+          <div class="settings-subsection">
+            <div class="form-section-title"><span>2.2</span><h3>Contato</h3></div>
+            <div class="form-grid">
+              <label>Telefone/WhatsApp<input name="telefone" type="tel" placeholder="(00) 00000-0000"></label>
+              <label>E-mail<input name="email" type="email" placeholder="contato@empresa.com"></label>
+              <label>Endereço<input name="endereco" type="text"></label>
+              <label>Cidade/UF<input name="cidadeUf" type="text" placeholder="São Paulo/SP"></label>
+              <label class="full-width">Horário de atendimento<input name="horario" type="text" placeholder="Segunda a sexta, 8h às 18h"></label>
+            </div>
+          </div>
+
+          <div class="settings-subsection">
+            <div class="form-section-title"><span>2.3</span><h3>Impressão</h3></div>
+            <div class="form-grid">
+              <label class="full-width">Observações padrão da OS<textarea name="observacoesPadrao" rows="3"></textarea></label>
+              <label class="full-width">Texto do rodapé da OS<textarea name="rodapeOs" rows="3"></textarea></label>
+            </div>
+          </div>
+
+          <div class="settings-subsection">
+            <div class="form-section-title"><span>2.4</span><h3>Logo</h3></div>
+            <div class="settings-logo-row">
+              <div class="logo-preview" id="logoPreview"><span>RO</span></div>
+              <div class="form-actions">
+                <label class="btn btn-secondary file-button">Escolher logo<input id="logoInput" type="file" accept="image/*"></label>
+                <button class="btn btn-danger" type="button" id="removeLogo">Remover logo</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions settings-save-row">
+            <button class="btn btn-primary" type="submit">Salvar configurações</button>
+            <p class="report-feedback" id="settingsFeedback" aria-live="polite"></p>
+          </div>
+        </details>
+      </section>
+
+      <section class="form-section settings-panel backup-section">
+        <details>
+          <summary class="settings-summary">
+            <span>03</span>
+            <div>
+              <h2>Backup e restauração</h2>
+              <p>Exporte uma cópia dos dados ou restaure um backup salvo anteriormente.</p>
+            </div>
+          </summary>
+          <div class="backup-actions">
+            <button class="btn btn-secondary" type="button" id="exportBackup">Exportar backup</button>
+            <button class="btn btn-secondary" type="button" id="importBackup">Importar backup</button>
+          </div>
+          <input id="backupFile" class="sr-only" type="file" accept=".json,application/json">
+          <p class="report-feedback" id="backupFeedback" aria-live="polite"></p>
+        </details>
+      </section>
     </form>
   </main>
 
