@@ -137,49 +137,63 @@
             </div>
             <div id="workshopServicesList" class="external-parts-list workshop-services-list"></div>
           </div>
-          <label>Subtotal serviços da retífica<input name="subtotalServicosRetifica" type="number" min="0" step="0.01" readonly></label>
-          <div class="discount-box full-width">
-            <button class="btn btn-secondary discount-toggle" type="button" id="toggleServiceDiscount" data-action="toggle-discount">Aplicar desconto de 5%</button>
-            <p>O desconto não será aplicado sobre peças externas.</p>
-            <input name="descontoServicoAtivo" type="hidden" value="false">
-            <input name="descontoServicoPercentual" type="hidden" value="5">
-          </div>
           <div class="external-parts full-width">
             <div class="external-parts-head">
               <h3>Peças externas</h3>
               <button class="btn btn-secondary external-part-add" type="button" id="addExternalPart" data-action="add-external-part">Adicionar peça externa</button>
             </div>
+            <div class="external-part-entry form-grid">
+              <label>Nome da peça<input id="externalPartName" type="text" data-external-part-field="nome" placeholder="Retentor, junta, parafuso..."></label>
+              <label>Fornecedor<input id="externalPartSupplier" type="text" data-external-part-field="fornecedor" placeholder="Fornecedor"></label>
+              <label>Valor<input id="externalPartValue" type="number" min="0" step="0.01" data-external-part-field="valor"></label>
+              <label>Observação<input id="externalPartNote" type="text" data-external-part-field="observacao" placeholder="Opcional"></label>
+            </div>
             <div id="externalPartsList" class="external-parts-list"></div>
             <p class="helper-text">Peças externas entram no total final sem desconto.</p>
+            <label class="external-parts-subtotal">Subtotal peças externas<input name="subtotalPecasExternas" type="number" min="0" step="0.01" readonly></label>
           </div>
-          <label>Subtotal peças externas<input name="subtotalPecasExternas" type="number" min="0" step="0.01" readonly></label>
-          <label>Desconto no serviço<input name="valorDescontoServico" type="number" min="0" step="0.01" readonly></label>
-          <label>Serviço com desconto<input name="valorServicoComDesconto" type="number" min="0" step="0.01" readonly></label>
-          <label>Valor total<input name="valorTotal" type="number" min="0" step="0.01" required readonly></label>
-          <label>Valor de entrada<input name="valorEntrada" type="number" min="0" step="0.01" value="0"></label>
-          <label>Valor restante<input id="valorRestante" name="valorRestante" type="text" readonly></label>
-          <label>Status do pagamento
-            <select name="statusPagamento">
-              <option value="pendente">Pendente</option>
-              <option value="parcial">Parcial</option>
-              <option value="pago">Pago</option>
-              <option value="sem cobrança">Sem cobrança</option>
-            </select>
-          </label>
-          <label>Forma de pagamento
-            <select name="formaPagamento">
-              <option value="">Não informado</option>
-              <option value="dinheiro">Dinheiro</option>
-              <option value="pix">Pix</option>
-              <option value="cartão de débito">Cartão de débito</option>
-              <option value="cartão de crédito">Cartão de crédito</option>
-              <option value="transferência">Transferência</option>
-              <option value="outro">Outro</option>
-            </select>
-          </label>
-          <label>Data do pagamento<input name="dataPagamento" type="date"></label>
-          <label>Recebido por<input name="recebidoPor" type="text"></label>
-          <label class="full-width">Observação do pagamento<textarea name="observacaoPagamento" rows="3"></textarea></label>
+          <div class="financial-summary full-width">
+            <div class="financial-summary-head">
+              <h3>Resumo financeiro da OS</h3>
+            </div>
+            <div class="form-grid financial-summary-grid">
+              <label>Subtotal serviços da retífica<input name="subtotalServicosRetifica" type="number" min="0" step="0.01" readonly></label>
+              <div class="discount-box full-width">
+                <button class="btn btn-secondary discount-toggle" type="button" id="toggleServiceDiscount" data-action="toggle-discount">Aplicar desconto de 5%</button>
+                <p>O desconto não será aplicado sobre peças externas.</p>
+                <input name="descontoServicoAtivo" type="hidden" value="false">
+                <input name="descontoServicoPercentual" type="hidden" value="5">
+              </div>
+              <label>Desconto no serviço<input name="valorDescontoServico" type="number" min="0" step="0.01" readonly></label>
+              <label>Serviços com desconto<input name="valorServicoComDesconto" type="number" min="0" step="0.01" readonly></label>
+              <label>Subtotal peças externas<input id="subtotalPecasExternasResumo" type="number" min="0" step="0.01" readonly></label>
+              <label>Valor total<input name="valorTotal" type="number" min="0" step="0.01" required readonly></label>
+              <label>Valor de entrada<input name="valorEntrada" type="number" min="0" step="0.01" value="0"></label>
+              <label>Valor restante<input id="valorRestante" name="valorRestante" type="text" readonly></label>
+              <label>Forma de pagamento
+                <select name="formaPagamento">
+                  <option value="">Não informado</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="pix">Pix</option>
+                  <option value="cartão de débito">Cartão de débito</option>
+                  <option value="cartão de crédito">Cartão de crédito</option>
+                  <option value="transferência">Transferência</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </label>
+              <label>Status do pagamento
+                <select name="statusPagamento">
+                  <option value="pendente">Pendente</option>
+                  <option value="parcial">Parcial</option>
+                  <option value="pago">Pago</option>
+                  <option value="sem cobrança">Sem cobrança</option>
+                </select>
+              </label>
+              <label>Data do pagamento<input name="dataPagamento" type="date"></label>
+              <label>Recebido por<input name="recebidoPor" type="text"></label>
+              <label class="full-width">Observação do pagamento<textarea name="observacaoPagamento" rows="3"></textarea></label>
+            </div>
+          </div>
         </div>
       </section>
 

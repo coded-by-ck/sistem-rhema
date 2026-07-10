@@ -35,6 +35,11 @@
   const workshopServicePriceId = document.getElementById('workshopServicePriceId');
   const addExternalPartButton = document.getElementById('addExternalPart');
   const externalPartsList = document.getElementById('externalPartsList');
+  const externalPartName = document.getElementById('externalPartName');
+  const externalPartSupplier = document.getElementById('externalPartSupplier');
+  const externalPartValue = document.getElementById('externalPartValue');
+  const externalPartNote = document.getElementById('externalPartNote');
+  const externalPartsSubtotalSummary = document.getElementById('subtotalPecasExternasResumo');
   let selectedClientKey = '';
   let openOrderId = '';
   let activeQuickFilter = '';
@@ -44,6 +49,7 @@
   let autocompleteIndex = -1;
   let serviceSelectedByAutocomplete = false;
   let isAddingWorkshopService = false;
+  let isAddingExternalPart = false;
   const selectedLabelOrderIds = new Set();
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
@@ -208,7 +214,7 @@
         nome: String(row.querySelector('[data-service-field="nome"]').value || '').trim(),
         categoriaPreco: String(row.querySelector('[data-service-field="categoriaPreco"]').value || '').trim(),
         tipoCobranca: type,
-        quantidade,
+        quantidade: quantity,
         valorUnitario: unitValue,
         subtotal,
         valor: subtotal,
@@ -271,6 +277,15 @@
     if (subtotalField) subtotalField.value = subtotal ?subtotal.toFixed(2) : '';
   }
 
+  function getWorkshopServicesSubtotalFromRows() {
+    if (!workshopServicesList) return 0;
+    return Array.from(workshopServicesList.querySelectorAll('[data-workshop-service]')).reduce(function (sum, row) {
+      updateWorkshopServiceRowSubtotal(row);
+      const subtotalField = row.querySelector('[data-service-field="subtotal"]');
+      return sum + toNumber(subtotalField && subtotalField.value);
+    }, 0);
+  }
+
   function getExternalPartsFromForm() {
     if (!externalPartsList) return [];
     return Array.from(externalPartsList.querySelectorAll('[data-external-part]')).map(function (row) {
@@ -283,6 +298,29 @@
     }).filter(function (part) {
       return part.nome || part.fornecedor || part.valor > 0 || part.observacao;
     });
+  }
+
+  function getExternalPartsSubtotalFromRows() {
+    return getExternalPartsFromForm().reduce(function (sum, part) {
+      return sum + toNumber(part.valor);
+    }, 0);
+  }
+
+  function getExternalPartDraft() {
+    return {
+      nome: String(externalPartName && externalPartName.value || '').trim(),
+      fornecedor: String(externalPartSupplier && externalPartSupplier.value || '').trim(),
+      valor: toNumber(externalPartValue && externalPartValue.value),
+      observacao: String(externalPartNote && externalPartNote.value || '').trim()
+    };
+  }
+
+  function resetExternalPartDraft() {
+    if (externalPartName) externalPartName.value = '';
+    if (externalPartSupplier) externalPartSupplier.value = '';
+    if (externalPartValue) externalPartValue.value = '';
+    if (externalPartNote) externalPartNote.value = '';
+    if (externalPartName) externalPartName.focus();
   }
 
   function addExternalPartRow(part) {
@@ -300,16 +338,39 @@
     externalPartsList.appendChild(row);
   }
 
+  function handleExternalPartFieldEnter(field, event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    const fields = [externalPartName, externalPartSupplier, externalPartValue, externalPartNote].filter(Boolean);
+    const index = fields.indexOf(field);
+    if (index >= 0 && index < fields.length - 1) {
+      fields[index + 1].focus();
+      return;
+    }
+    addExternalPart();
+  }
+
+  function handleExternalPartRowEnter(event) {
+    if (event.key !== 'Enter') return;
+    const field = event.target.closest('[data-part-field]');
+    if (!field) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    const row = field.closest('[data-external-part]');
+    const fields = row ?Array.from(row.querySelectorAll('[data-part-field]')) : [];
+    const index = fields.indexOf(field);
+    if (index >= 0 && index < fields.length - 1) fields[index + 1].focus();
+    updateRemainingPreview();
+  }
+
   function calculateFormValues() {
     if (!form) return;
     const servicosRetifica = getWorkshopServicesFromForm();
-    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) {
-      return sum + toNumber(service.subtotal || service.valor);
-    }, 0);
-    const pecasExternas = getExternalPartsFromForm();
-    const subtotalPecasExternas = pecasExternas.reduce(function (sum, part) {
-      return sum + toNumber(part.valor);
-    }, 0);
+    const subtotalServicosRetifica = getWorkshopServicesSubtotalFromRows();
+    const subtotalPecasExternas = getExternalPartsSubtotalFromRows();
     const descontoAtivo = getFormValue('descontoServicoAtivo') === 'true';
     const descontoPercentual = descontoAtivo ?5 : 0;
     const valorDescontoServico = descontoAtivo ?subtotalServicosRetifica * (descontoPercentual / 100) : 0;
@@ -320,6 +381,7 @@
     if (descontoPercentualField) descontoPercentualField.value = String(descontoPercentual);
     setFormNumberValue('subtotalServicosRetifica', subtotalServicosRetifica);
     setFormNumberValue('subtotalPecasExternas', subtotalPecasExternas);
+    if (externalPartsSubtotalSummary) externalPartsSubtotalSummary.value = toNumber(subtotalPecasExternas).toFixed(2);
     setFormNumberValue('valorDescontoServico', valorDescontoServico);
     setFormNumberValue('valorServicoComDesconto', valorServicoComDesconto);
     setFormNumberValue('valorTotal', valorTotal);
@@ -618,7 +680,7 @@
     const marca = String(data.get('marca') || '').trim();
     const modelo = String(data.get('modelo') || '').trim();
     const servicosRetifica = getWorkshopServicesFromForm();
-    const subtotalServicosRetifica = servicosRetifica.reduce(function (sum, service) { return sum + toNumber(service.subtotal || service.valor); }, 0);
+    const subtotalServicosRetifica = getWorkshopServicesSubtotalFromRows();
     const tipoServico = servicosRetifica.map(function (service) { return service.nome; }).filter(Boolean).join(', ');
     const pecasExternas = getExternalPartsFromForm();
     const descontoServicoAtivo = data.get('descontoServicoAtivo') === 'true';
@@ -705,8 +767,17 @@
   }
 
   function addExternalPart() {
-    addExternalPartRow();
-    updateRemainingPreview();
+    if (isAddingExternalPart) return;
+    const part = getExternalPartDraft();
+    if (!part.nome && !part.fornecedor && part.valor <= 0 && !part.observacao) return;
+    isAddingExternalPart = true;
+    try {
+      addExternalPartRow(part);
+      updateRemainingPreview();
+      resetExternalPartDraft();
+    } finally {
+      isAddingExternalPart = false;
+    }
   }
 
   function addWorkshopService() {
@@ -823,7 +894,6 @@
       if (valorEntradaField) valorEntradaField.addEventListener(eventName, updateRemainingPreview);
       if (statusPagamentoField) statusPagamentoField.addEventListener(eventName, updateRemainingPreview);
       if (workshopServicesList) workshopServicesList.addEventListener(eventName, updateRemainingPreview);
-      if (externalPartsList) externalPartsList.addEventListener(eventName, updateRemainingPreview);
     });
     ['marca', 'modelo', 'motor', 'peca', 'tipoCabecote', 'quantidadeValvulas'].forEach(function (fieldName) {
       if (!form.elements[fieldName]) return;
@@ -893,6 +963,12 @@
         handleServiceFieldEnter(field, event);
       });
     });
+    [externalPartName, externalPartSupplier, externalPartValue, externalPartNote].forEach(function (field) {
+      if (!field) return;
+      field.addEventListener('keydown', function (event) {
+        handleExternalPartFieldEnter(field, event);
+      });
+    });
     updateServiceDraftUi();
     document.addEventListener('click', function (event) {
       if (workshopServiceSuggestions && !event.target.closest('.service-name-field')) closeAutocomplete();
@@ -943,6 +1019,13 @@
       });
     }
     if (externalPartsList) {
+      externalPartsList.addEventListener('keydown', handleExternalPartRowEnter);
+      externalPartsList.addEventListener('input', function () {
+        updateRemainingPreview();
+      });
+      externalPartsList.addEventListener('change', function () {
+        updateRemainingPreview();
+      });
       externalPartsList.addEventListener('click', function (event) {
         const button = event.target.closest('[data-remove-external-part]');
         if (!button) return;
