@@ -626,7 +626,8 @@
       totalRegistros: orders.length,
       ordens: orders,
       configuracoesEmpresa: getCompanySettings(),
-      tabelaPrecos: RetificaStorage.getPriceTable ?RetificaStorage.getPriceTable() : []
+      tabelaPrecos: RetificaStorage.getPriceTable ?RetificaStorage.getPriceTable() : [],
+      catalogoServicos: RetificaStorage.getServiceCatalog ?RetificaStorage.getServiceCatalog() : []
     };
 
     downloadJson(getBackupFileName(), backup);
@@ -651,6 +652,7 @@
         RetificaStorage.updateOrders(data.ordens);
         if (data.configuracoesEmpresa) RetificaStorage.saveCompanySettings(data.configuracoesEmpresa);
         if (Array.isArray(data.tabelaPrecos) && RetificaStorage.savePriceTable) RetificaStorage.savePriceTable(data.tabelaPrecos);
+        if (Array.isArray(data.catalogoServicos) && RetificaStorage.saveServiceCatalog) RetificaStorage.saveServiceCatalog(data.catalogoServicos);
         renderFinance();
         applyCompanyBrand();
         showBackupMessage('Backup restaurado com sucesso.');

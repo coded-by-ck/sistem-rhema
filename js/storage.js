@@ -6,26 +6,63 @@
   const COMPANY_KEY = 'retificaOS.companySettings';
   const SUGGESTED_PRICES_KEY = 'retifica_precos_sugeridos';
   const PRICE_TABLE_KEY = 'retificaOS.priceTable';
+  const SERVICE_CATALOG_KEY = 'retificaOS.serviceCatalog';
   const CHARGE_TYPES = ['servico', 'unidade', 'cabecote', 'jogo'];
 
   const INITIAL_PRICE_TABLE = [
-    { categoria: 'Scania 113', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 300 },
-    { categoria: 'Scania 113', servico: 'Retificar sedes', tipoCobranca: 'unidade', precoPadrao: 15 },
-    { categoria: 'Scania 113', servico: 'Frisar', tipoCobranca: 'servico', precoPadrao: null },
-    { categoria: 'Perkins', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 350 },
-    { categoria: 'Perkins', servico: 'Montagem', tipoCobranca: 'servico', precoPadrao: 150 },
-    { categoria: 'Cummins', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 500 },
-    { categoria: 'Scania 124', servico: 'Plaina', tipoCobranca: 'unidade', precoPadrao: 100 },
-    { categoria: 'Scania 124', servico: 'Trocar guia', tipoCobranca: 'servico', precoPadrao: 50 },
-    { categoria: 'Scania 124', servico: 'Retificar sede', tipoCobranca: 'unidade', precoPadrao: 50 },
-    { categoria: 'Scania 124', servico: 'Esmerilhar', tipoCobranca: 'unidade', precoPadrao: 50 },
-    { categoria: 'Scania 124', servico: 'Troca de anel', tipoCobranca: 'servico', precoPadrao: 50 },
-    { categoria: 'Scania 124', servico: 'Frisar', tipoCobranca: 'servico', precoPadrao: 50 },
-    { categoria: 'Scania 124', servico: 'Banho químico', tipoCobranca: 'servico', precoPadrao: 40 },
-    { categoria: 'Scania 124', servico: 'Pistão', tipoCobranca: 'servico', precoPadrao: 40 },
-    { categoria: 'Scania 124', servico: 'Trocar selo', tipoCobranca: 'unidade', precoPadrao: 10 }
+    { id: 'preco-inicial-1', categoria: 'Scania 113', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 300 },
+    { id: 'preco-inicial-2', categoria: 'Scania 113', servico: 'Retificar sedes', tipoCobranca: 'unidade', precoPadrao: 15 },
+    { id: 'preco-inicial-3', categoria: 'Scania 113', servico: 'Frisar', tipoCobranca: 'servico', precoPadrao: null },
+    { id: 'preco-inicial-4', categoria: 'Perkins', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 350 },
+    { id: 'preco-inicial-5', categoria: 'Perkins', servico: 'Esmerilhar e montar', tipoCobranca: 'servico', precoPadrao: 150 },
+    { id: 'preco-inicial-6', categoria: 'Cummins', servico: 'Plaina', tipoCobranca: 'servico', precoPadrao: 500 },
+    { id: 'preco-inicial-8v-1', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Plainar cabeçote', tipoCobranca: 'servico', precoPadrao: 200 },
+    { id: 'preco-inicial-8v-2', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Trocar guias', tipoCobranca: 'servico', precoPadrao: 100 },
+    { id: 'preco-inicial-8v-3', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Retificar sedes', tipoCobranca: 'servico', precoPadrao: 100 },
+    { id: 'preco-inicial-8v-4', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Esmerilhar e montar', tipoCobranca: 'servico', precoPadrao: 100 },
+    { id: 'preco-inicial-8v-5', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Regular válvulas', tipoCobranca: 'servico', precoPadrao: 150 },
+    { id: 'preco-inicial-8v-6', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Teste de trinca eletrônico', tipoCobranca: 'servico', precoPadrao: 120 },
+    { id: 'preco-inicial-8v-7', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Banho químico', tipoCobranca: 'servico', precoPadrao: 100 },
+    { id: 'preco-inicial-8v-8', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Serviço de solda', tipoCobranca: 'servico', precoPadrao: 50 },
+    { id: 'preco-inicial-8v-9', categoria: 'Geral', quantidadeValvulas: '8V', servico: 'Trocar selo', tipoCobranca: 'servico', precoPadrao: 30 }
   ];
-  const REMOVED_INITIAL_PRICE_IDS = ['preco-inicial-16', 'preco-inicial-17', 'preco-inicial-18', 'preco-inicial-19', 'preco-inicial-20', 'preco-inicial-21', 'preco-inicial-22'];
+  const INITIAL_SERVICE_CATALOG = [
+    'Plainar cabeçote',
+    'Trocar guias',
+    'Retificar sedes',
+    'Esmerilhar e montar',
+    'Regular válvulas',
+    'Frisar cabeçotes',
+    'Trocar vedadores',
+    'Trocar sedes',
+    'Adaptar guias',
+    'Serviço de sacar prisioneiros',
+    'Adaptar roscas',
+    'Teste de trinca eletrônico',
+    'Banho químico',
+    'Trocar camisa de bico',
+    'Serviço de solda',
+    'Trocar selo'
+  ];
+  const REMOVED_OLD_SEED_RECORDS = [
+    { id: 'preco-inicial-7', categoria: 'Scania 124', servico: 'Plaina', tipoCobranca: 'unidade', precoPadrao: 100 },
+    { id: 'preco-inicial-8', categoria: 'Scania 124', servico: 'Trocar guia', tipoCobranca: 'servico', precoPadrao: 50 },
+    { id: 'preco-inicial-9', categoria: 'Scania 124', servico: 'Retificar sede', tipoCobranca: 'unidade', precoPadrao: 50 },
+    { id: 'preco-inicial-10', categoria: 'Scania 124', servico: 'Esmerilhar', tipoCobranca: 'unidade', precoPadrao: 50 },
+    { id: 'preco-inicial-11', categoria: 'Scania 124', servico: 'Troca de anel', tipoCobranca: 'servico', precoPadrao: 50 },
+    { id: 'preco-inicial-12', categoria: 'Scania 124', servico: 'Frisar', tipoCobranca: 'servico', precoPadrao: 50 },
+    { id: 'preco-inicial-13', categoria: 'Scania 124', servico: 'Banho químico', tipoCobranca: 'servico', precoPadrao: 40 },
+    { id: 'preco-inicial-14', categoria: 'Scania 124', servico: 'Pistão', tipoCobranca: 'servico', precoPadrao: 40 },
+    { id: 'preco-inicial-15', categoria: 'Scania 124', servico: 'Trocar selo', tipoCobranca: 'unidade', precoPadrao: 10 },
+    { id: 'preco-inicial-5', categoria: 'Perkins', servico: 'Montagem', tipoCobranca: 'servico', precoPadrao: 150 },
+    { id: 'preco-inicial-16', categoria: 'Fiat / Palio', servico: 'Plaina', tipoCobranca: 'unidade', precoPadrao: 80 },
+    { id: 'preco-inicial-17', categoria: 'Fiat / Palio', servico: 'Retífica de válvula / sede', tipoCobranca: 'unidade', precoPadrao: 15 },
+    { id: 'preco-inicial-18', categoria: 'Fiat / Palio', servico: 'Descarbonização', tipoCobranca: 'servico', precoPadrao: 100 },
+    { id: 'preco-inicial-19', categoria: 'Fiat / Palio', servico: 'Esmerilhamento', tipoCobranca: 'unidade', precoPadrao: 20 },
+    { id: 'preco-inicial-20', categoria: 'Fiat / Palio', servico: 'Banho químico', tipoCobranca: 'servico', precoPadrao: 30 },
+    { id: 'preco-inicial-21', categoria: 'Fiat / Palio', servico: 'Troca de selo', tipoCobranca: 'unidade', precoPadrao: 5 },
+    { id: 'preco-inicial-22', categoria: 'Fiat / Palio', servico: 'Guia', tipoCobranca: 'unidade', precoPadrao: 20 }
+  ];
 
   const DEFAULT_COMPANY = {
     nome: 'Retífica OS',
@@ -107,7 +144,13 @@
       pistao: 'Pistão',
       'retifica de valvula / sede': 'Retífica de válvula / sede',
       descarbonizacao: 'Descarbonização',
-      'troca de selo': 'Troca de selo'
+      'troca de selo': 'Troca de selo',
+      'plainar cabecote': 'Plainar cabeçote',
+      'regular valvulas': 'Regular válvulas',
+      'frisar cabecotes': 'Frisar cabeçotes',
+      'teste de trinca eletronico': 'Teste de trinca eletrônico',
+      'servico de solda': 'Serviço de solda',
+      'servico de sacar prisioneiros': 'Serviço de sacar prisioneiros'
     };
     return names[key] || original;
   }
@@ -133,15 +176,58 @@
     });
   }
 
+  function normalizeCatalogRecord(record, index) {
+    const source = typeof record === 'string' ?{ servico: record } : (record || {});
+    return {
+      id: String(source.id || `catalogo-inicial-${index + 1}`),
+      servico: formatKnownServiceName(source.servico || source.nome),
+      ativo: source.ativo !== false
+    };
+  }
+
+  function normalizeServiceCatalog(records) {
+    return (Array.isArray(records) ?records : []).map(normalizeCatalogRecord).filter(function (record) {
+      return record.servico;
+    });
+  }
+
+  function getDefaultServiceCatalog() {
+    return INITIAL_SERVICE_CATALOG.map(normalizeCatalogRecord);
+  }
+
   function getDefaultPriceTable() {
     return INITIAL_PRICE_TABLE.map(function (record, index) {
       return normalizePriceTableRecord({
         ...record,
-        id: `preco-inicial-${index + 1}`,
+        id: record.id || `preco-inicial-${index + 1}`,
         ativo: true,
         atualizadoEm: ''
       }, index);
     });
+  }
+
+  function sameSeedRecord(record, seed) {
+    return record.id === seed.id
+      && record.categoria === seed.categoria
+      && normalizeTextForKey(record.servico) === normalizeTextForKey(seed.servico)
+      && record.tipoCobranca === seed.tipoCobranca
+      && nullableNumber(record.precoPadrao) === nullableNumber(seed.precoPadrao);
+  }
+
+  function mergeMissingInitialPrices(records) {
+    const merged = records.slice();
+    getDefaultPriceTable().forEach(function (seed) {
+      const exists = merged.some(function (record) {
+        return record.id === seed.id
+          || (
+            normalizeTextForKey(record.categoria) === normalizeTextForKey(seed.categoria)
+            && normalizeValvesForKey(record.quantidadeValvulas || '') === normalizeValvesForKey(seed.quantidadeValvulas || '')
+            && normalizeTextForKey(record.servico) === normalizeTextForKey(seed.servico)
+          );
+      });
+      if (!exists) merged.push(seed);
+    });
+    return merged;
   }
 
   function readPriceTable() {
@@ -149,13 +235,25 @@
     if (Array.isArray(current)) {
       const normalized = normalizePriceTable(current);
       const migrated = normalized.filter(function (record) {
-        return !(REMOVED_INITIAL_PRICE_IDS.includes(record.id) && record.categoria === 'Fiat / Palio');
+        const removedOldSeed = REMOVED_OLD_SEED_RECORDS.some(function (seed) {
+          return sameSeedRecord(record, seed);
+        });
+        return !removedOldSeed;
       });
-      if (migrated.length !== normalized.length) write(PRICE_TABLE_KEY, migrated);
-      return migrated;
+      const merged = mergeMissingInitialPrices(migrated);
+      if (merged.length !== normalized.length) write(PRICE_TABLE_KEY, merged);
+      return merged;
     }
     const initial = getDefaultPriceTable();
     write(PRICE_TABLE_KEY, initial);
+    return initial;
+  }
+
+  function readServiceCatalog() {
+    const current = read(SERVICE_CATALOG_KEY, null);
+    if (Array.isArray(current)) return normalizeServiceCatalog(current);
+    const initial = getDefaultServiceCatalog();
+    write(SERVICE_CATALOG_KEY, initial);
     return initial;
   }
 
@@ -467,12 +565,26 @@
       return PRICE_TABLE_KEY;
     },
 
+    getServiceCatalogKey() {
+      return SERVICE_CATALOG_KEY;
+    },
+
     getChargeTypes() {
       return CHARGE_TYPES.slice();
     },
 
     getPriceTable() {
       return readPriceTable();
+    },
+
+    getServiceCatalog() {
+      return readServiceCatalog();
+    },
+
+    saveServiceCatalog(records) {
+      const normalized = normalizeServiceCatalog(records);
+      write(SERVICE_CATALOG_KEY, normalized);
+      return normalized;
     },
 
     savePriceTable(records) {
@@ -545,39 +657,81 @@
         .replace(/\s+/g, ' ')
         .trim();
       if (prepared.length < 1) return [];
-      const preferredCategory = normalizeTextForKey(category || '');
-      const preferredValves = normalizeValvesForKey(quantidadeValvulas || '');
+      const preferredCategory = String(category || '').trim() ?normalizeTextForKey(category) : '';
+      const preferredValves = String(quantidadeValvulas || '').trim() ?normalizeValvesForKey(quantidadeValvulas) : '';
       const genericCategories = ['geral', 'generico', 'padrao'];
       const matching = this.getPriceTable().filter(function (record) {
         return record.ativo !== false && normalizeTextForKey(record.servico).includes(prepared);
       });
+      const catalogMatches = this.getServiceCatalog().filter(function (record) {
+        return record.ativo !== false && normalizeTextForKey(record.servico).includes(prepared);
+      }).map(function (record) {
+        return {
+          id: record.id,
+          categoria: 'Catálogo',
+          quantidadeValvulas: '',
+          servico: record.servico,
+          tipoCobranca: 'servico',
+          precoPadrao: null,
+          ativo: true,
+          grupoResultado: 'catalogo',
+          origemResultado: 'catalogo'
+        };
+      });
 
-      function valveScore(record) {
+      function hasExactValves(record) {
         const recordValves = normalizeValvesForKey(record.quantidadeValvulas || '');
-        if (!record.quantidadeValvulas) return 1;
-        return preferredValves && recordValves === preferredValves ?2 : 0;
+        return Boolean(record.quantidadeValvulas && preferredValves && recordValves === preferredValves);
+      }
+
+      function hasNoValves(record) {
+        return !record.quantidadeValvulas;
+      }
+
+      function isGeneric(record) {
+        return genericCategories.includes(normalizeTextForKey(record.categoria));
       }
 
       function sortByPriority(a, b) {
-        return valveScore(b) - valveScore(a) || a.servico.localeCompare(b.servico);
+        return a.servico.localeCompare(b.servico);
       }
 
-      const exactCategory = preferredCategory ?matching.filter(function (record) {
-        return normalizeTextForKey(record.categoria) === preferredCategory && valveScore(record) > 0;
+      const categoryAndValves = preferredCategory ?matching.filter(function (record) {
+        return normalizeTextForKey(record.categoria) === preferredCategory && hasExactValves(record);
       }).sort(sortByPriority) : [];
-      if (exactCategory.length) return exactCategory.map(function (record) {
+      if (categoryAndValves.length) return categoryAndValves.map(function (record) {
         return { ...record, grupoResultado: 'categoria' };
       });
 
-      const generic = matching.filter(function (record) {
-        return genericCategories.includes(normalizeTextForKey(record.categoria)) && valveScore(record) > 0;
+      const categoryOnly = preferredCategory ?matching.filter(function (record) {
+        return normalizeTextForKey(record.categoria) === preferredCategory && hasNoValves(record);
+      }).sort(sortByPriority) : [];
+      if (categoryOnly.length) return categoryOnly.map(function (record) {
+        return { ...record, grupoResultado: 'categoria' };
+      });
+
+      const genericValves = matching.filter(function (record) {
+        return isGeneric(record) && hasExactValves(record);
       }).sort(sortByPriority);
-      if (generic.length) return generic.map(function (record) {
+      if (genericValves.length) return genericValves.map(function (record) {
         return { ...record, grupoResultado: 'generico' };
       });
 
-      return matching.sort(sortByPriority).map(function (record) {
-        return { ...record, grupoResultado: preferredCategory ?'outros' : 'categoria' };
+      const genericNoValves = matching.filter(function (record) {
+        return isGeneric(record) && hasNoValves(record);
+      }).sort(sortByPriority);
+      if (genericNoValves.length) return genericNoValves.map(function (record) {
+        return { ...record, grupoResultado: 'generico' };
+      });
+
+      if (!preferredCategory) {
+        return matching.sort(sortByPriority).map(function (record) {
+          return { ...record, grupoResultado: 'outros' };
+        }).concat(catalogMatches);
+      }
+
+      return catalogMatches.length ?catalogMatches : matching.sort(sortByPriority).map(function (record) {
+        return { ...record, grupoResultado: 'outros' };
       });
     },
 

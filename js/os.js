@@ -43,6 +43,7 @@
   let autocompleteSuggestions = [];
   let autocompleteIndex = -1;
   let serviceSelectedByAutocomplete = false;
+  let isAddingWorkshopService = false;
   const selectedLabelOrderIds = new Set();
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
@@ -98,6 +99,26 @@
     return fields.length ?fields[0].value : '';
   }
 
+  function getFormField(name) {
+    if (!name) return null;
+    let field = null;
+    if (form && form.elements) {
+      field = typeof form.elements.namedItem === 'function'
+        ?form.elements.namedItem(name)
+        : null;
+      if (!field) field = form.elements[name] || null;
+    }
+    if (field && !field.tagName && typeof field.length === 'number') field = field[0] || null;
+    if (!field && form) field = form.querySelector(`[name="${name}"]`);
+    if (!field) field = document.getElementById(name);
+    return field || null;
+  }
+
+  function setFormNumberValue(name, value) {
+    const field = getFormField(name);
+    if (field) field.value = toNumber(value).toFixed(2);
+  }
+
   function getFirstFormValue(names) {
     const fieldNames = Array.isArray(names) ?names : [names];
     for (let index = 0; index < fieldNames.length; index += 1) {
@@ -134,6 +155,16 @@
     return ['unidade', 'cabecote', 'jogo'].includes(normalizeChargeType(type));
   }
 
+  function syncChargeTypeWithQuantity(typeField, quantityField) {
+    let type = normalizeChargeType(typeField && typeField.value);
+    const quantity = toNumber(quantityField && quantityField.value);
+    if (type === 'servico' && quantity > 1) {
+      type = 'unidade';
+      if (typeField) typeField.value = type;
+    }
+    return type;
+  }
+
   function getChargeTypeLabel(type) {
     return {
       servico: 'Servico',
@@ -144,7 +175,7 @@
   }
 
   function getWorkshopServiceDraft() {
-    const type = normalizeChargeType(workshopServiceChargeType && workshopServiceChargeType.value);
+    const type = syncChargeTypeWithQuantity(workshopServiceChargeType, workshopServiceQuantity);
     const quantity = isQuantityNeeded(type) ?Math.max(toNumber(workshopServiceQuantity && workshopServiceQuantity.value) || 1, 1) : 1;
     const unitValue = toNumber(workshopServiceValue && workshopServiceValue.value);
     const subtotal = calculateServiceSubtotal(quantity, unitValue);
@@ -166,8 +197,10 @@
   function getWorkshopServicesFromForm() {
     if (!workshopServicesList) return [];
     return Array.from(workshopServicesList.querySelectorAll('[data-workshop-service]')).map(function (row) {
-      const type = normalizeChargeType(row.querySelector('[data-service-field="tipoCobranca"]').value);
-      const quantity = isQuantityNeeded(type) ?Math.max(toNumber(row.querySelector('[data-service-field="quantidade"]').value) || 1, 1) : 1;
+      const typeField = row.querySelector('[data-service-field="tipoCobranca"]');
+      const quantityField = row.querySelector('[data-service-field="quantidade"]');
+      const type = syncChargeTypeWithQuantity(typeField, quantityField);
+      const quantity = isQuantityNeeded(type) ?Math.max(toNumber(quantityField && quantityField.value) || 1, 1) : 1;
       const unitValue = toNumber(row.querySelector('[data-service-field="valorUnitario"]').value);
       const subtotal = calculateServiceSubtotal(quantity, unitValue);
       return {
@@ -231,7 +264,7 @@
     const quantityField = row.querySelector('[data-service-field="quantidade"]');
     const valueField = row.querySelector('[data-service-field="valorUnitario"]');
     const subtotalField = row.querySelector('[data-service-field="subtotal"]');
-    const type = normalizeChargeType(typeField && typeField.value);
+    const type = syncChargeTypeWithQuantity(typeField, quantityField);
     const quantity = isQuantityNeeded(type) ?Math.max(toNumber(quantityField && quantityField.value) || 1, 1) : 1;
     const subtotal = calculateServiceSubtotal(quantity, valueField && valueField.value);
     if (quantityField && !isQuantityNeeded(type)) quantityField.value = '1';
@@ -283,12 +316,13 @@
     const valorServicoComDesconto = Math.max(subtotalServicosRetifica - valorDescontoServico, 0);
     const valorTotal = valorServicoComDesconto + subtotalPecasExternas;
 
-    if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = String(descontoPercentual);
-    if (form.subtotalServicosRetifica) form.subtotalServicosRetifica.value = subtotalServicosRetifica.toFixed(2);
-    if (form.subtotalPecasExternas) form.subtotalPecasExternas.value = subtotalPecasExternas.toFixed(2);
-    if (form.valorDescontoServico) form.valorDescontoServico.value = valorDescontoServico.toFixed(2);
-    if (form.valorServicoComDesconto) form.valorServicoComDesconto.value = valorServicoComDesconto.toFixed(2);
-    if (form.valorTotal) form.valorTotal.value = valorTotal.toFixed(2);
+    const descontoPercentualField = getFormField('descontoServicoPercentual');
+    if (descontoPercentualField) descontoPercentualField.value = String(descontoPercentual);
+    setFormNumberValue('subtotalServicosRetifica', subtotalServicosRetifica);
+    setFormNumberValue('subtotalPecasExternas', subtotalPecasExternas);
+    setFormNumberValue('valorDescontoServico', valorDescontoServico);
+    setFormNumberValue('valorServicoComDesconto', valorServicoComDesconto);
+    setFormNumberValue('valorTotal', valorTotal);
     if (toggleServiceDiscountButton) {
       toggleServiceDiscountButton.textContent = descontoAtivo ?'Remover desconto de 5%' : 'Aplicar desconto de 5%';
       toggleServiceDiscountButton.classList.toggle('btn-danger', descontoAtivo);
@@ -302,8 +336,8 @@
     suggestedPriceMessage.hidden = !message;
   }
 
-  function updateServiceDraftUi() {
-    const type = normalizeChargeType(workshopServiceChargeType && workshopServiceChargeType.value);
+  function updateServiceDraftUi(options) {
+    const type = syncChargeTypeWithQuantity(workshopServiceChargeType, workshopServiceQuantity);
     const quantityNeeded = isQuantityNeeded(type);
     if (workshopServiceQuantityLabel) workshopServiceQuantityLabel.hidden = !quantityNeeded;
     if (workshopServiceQuantity && !quantityNeeded) workshopServiceQuantity.value = '1';
@@ -312,12 +346,13 @@
 
     const serviceName = String(workshopServiceName && workshopServiceName.value || '').trim();
     if (!serviceName) setSuggestedPriceMessage('');
-    updateRemainingPreview();
+    if (!options || !options.skipFinancialPreview) updateRemainingPreview();
   }
 
   function applyPriceRecord(record) {
     if (!record) return;
-    selectedPriceRecord = record;
+    const isCatalogRecord = record.origemResultado === 'catalogo';
+    selectedPriceRecord = isCatalogRecord ?null : record;
     serviceSelectedByAutocomplete = true;
     if (workshopServiceName) workshopServiceName.value = record.servico || '';
     if (workshopServiceChargeType) workshopServiceChargeType.value = normalizeChargeType(record.tipoCobranca);
@@ -327,7 +362,7 @@
         ?''
         : toNumber(record.precoPadrao).toFixed(2);
     }
-    if (workshopServicePriceId) workshopServicePriceId.value = record.id;
+    if (workshopServicePriceId) workshopServicePriceId.value = isCatalogRecord ?'' : record.id;
     setSuggestedPriceMessage(record.precoPadrao === null || record.precoPadrao === undefined || record.precoPadrao === ''
       ?'Preco padrao nao cadastrado.'
       :'Preco preenchido pela tabela padrao. Voce pode alterar somente nesta OS.');
@@ -341,6 +376,20 @@
     selectedPriceRecord = null;
     serviceSelectedByAutocomplete = false;
     if (workshopServicePriceId) workshopServicePriceId.value = '';
+  }
+
+  function resetWorkshopServiceDraft() {
+    closeAutocomplete();
+    if (workshopServiceName) workshopServiceName.value = '';
+    if (workshopServiceChargeType) workshopServiceChargeType.value = 'servico';
+    if (workshopServiceQuantity) workshopServiceQuantity.value = '1';
+    if (workshopServiceValue) workshopServiceValue.value = '';
+    if (workshopServiceSubtotal) workshopServiceSubtotal.value = '';
+    if (workshopServiceNote) workshopServiceNote.value = '';
+    resetSelectedPriceRecord();
+    setSuggestedPriceMessage('');
+    updateServiceDraftUi({ skipFinancialPreview: true });
+    if (workshopServiceName) workshopServiceName.focus();
   }
 
   function renderAutocomplete() {
@@ -357,7 +406,7 @@
         : formatCurrency(record.precoPadrao);
       const group = record.grupoResultado || 'categoria';
       const heading = group !== lastGroup
-        ?`<div class="autocomplete-heading">${group === 'outros' ?'Outros resultados' : group === 'generico' ?'Resultados genericos' : 'Categoria atual'}</div>`
+        ?`<div class="autocomplete-heading">${group === 'outros' ?'Outros resultados' : group === 'catalogo' ?'Catálogo de serviços' : group === 'generico' ?'Resultados genericos' : 'Categoria atual'}</div>`
         : '';
       lastGroup = group;
       const valves = record.quantidadeValvulas ?` · ${record.quantidadeValvulas}` : '';
@@ -647,9 +696,11 @@
   }
 
   function toggleServiceDiscount() {
-    if (!form || !form.descontoServicoAtivo) return;
-    form.descontoServicoAtivo.value = form.descontoServicoAtivo.value === 'true' ?'false' : 'true';
-    if (form.descontoServicoPercentual) form.descontoServicoPercentual.value = form.descontoServicoAtivo.value === 'true' ?'5' : '0';
+    const descontoAtivoField = getFormField('descontoServicoAtivo');
+    const descontoPercentualField = getFormField('descontoServicoPercentual');
+    if (!form || !descontoAtivoField) return;
+    descontoAtivoField.value = descontoAtivoField.value === 'true' ?'false' : 'true';
+    if (descontoPercentualField) descontoPercentualField.value = descontoAtivoField.value === 'true' ?'5' : '0';
     updateRemainingPreview();
   }
 
@@ -659,35 +710,38 @@
   }
 
   function addWorkshopService() {
+    if (isAddingWorkshopService) return;
     if (!workshopServiceName || !workshopServiceValue) return;
     const service = getWorkshopServiceDraft();
     if (!service.nome && service.subtotal <= 0 && !service.observacao) return;
-    addWorkshopServiceRow(service);
-    workshopServiceName.value = '';
-    if (workshopServiceChargeType) workshopServiceChargeType.value = 'servico';
-    if (workshopServiceQuantity) workshopServiceQuantity.value = '1';
-    workshopServiceValue.value = '';
-    if (workshopServiceSubtotal) workshopServiceSubtotal.value = '';
-    if (workshopServiceNote) workshopServiceNote.value = '';
-    resetSelectedPriceRecord();
-    setSuggestedPriceMessage('');
-    updateServiceDraftUi();
-    if (workshopServiceName) workshopServiceName.focus();
+    isAddingWorkshopService = true;
+    try {
+      addWorkshopServiceRow(service);
+      updateRemainingPreview();
+      resetWorkshopServiceDraft();
+    } finally {
+      isAddingWorkshopService = false;
+    }
   }
 
   function updateRemainingPreview() {
     if (!form) return;
     calculateFormValues();
-    const valorTotal = toNumber(form.valorTotal.value);
-    const valorEntrada = toNumber(form.valorEntrada.value);
-    if (shouldUseNoChargeStatus(form.statusServico.value, valorTotal, valorEntrada)) {
-      form.statusPagamento.value = 'sem cobrança';
-    } else if (form.statusPagamento.value === 'sem cobrança') {
-      form.statusPagamento.value = 'pendente';
+    const valorTotalField = getFormField('valorTotal');
+    const valorEntradaField = getFormField('valorEntrada');
+    const statusServicoField = getFormField('statusServico');
+    const statusPagamentoField = getFormField('statusPagamento');
+    const valorRestanteField = getFormField('valorRestante') || document.getElementById('valorRestante');
+    const valorTotal = toNumber(valorTotalField && valorTotalField.value);
+    const valorEntrada = toNumber(valorEntradaField && valorEntradaField.value);
+    if (statusServicoField && statusPagamentoField && shouldUseNoChargeStatus(statusServicoField.value, valorTotal, valorEntrada)) {
+      statusPagamentoField.value = 'sem cobran\u00e7a';
+    } else if (statusPagamentoField && statusPagamentoField.value === 'sem cobran\u00e7a') {
+      statusPagamentoField.value = 'pendente';
     }
-    const statusPagamento = form.statusPagamento.value;
-    const remaining = statusPagamento === 'pago' || statusPagamento === 'sem cobrança' ?0 : Math.max(valorTotal - valorEntrada, 0);
-    document.getElementById('valorRestante').value = formatCurrency(remaining);
+    const statusPagamento = statusPagamentoField ?statusPagamentoField.value : '';
+    const remaining = statusPagamento === 'pago' || statusPagamento === 'sem cobran\u00e7a' ?0 : Math.max(valorTotal - valorEntrada, 0);
+    if (valorRestanteField) valorRestanteField.value = formatCurrency(remaining);
     refreshOpenCollapsibles();
   }
 
@@ -762,9 +816,12 @@
     setSuggestedPriceMessage(false);
 
     ['input', 'change'].forEach(function (eventName) {
-      form.valorTotal.addEventListener(eventName, updateRemainingPreview);
-      form.valorEntrada.addEventListener(eventName, updateRemainingPreview);
-      form.statusPagamento.addEventListener(eventName, updateRemainingPreview);
+      const valorTotalField = getFormField('valorTotal');
+      const valorEntradaField = getFormField('valorEntrada');
+      const statusPagamentoField = getFormField('statusPagamento');
+      if (valorTotalField) valorTotalField.addEventListener(eventName, updateRemainingPreview);
+      if (valorEntradaField) valorEntradaField.addEventListener(eventName, updateRemainingPreview);
+      if (statusPagamentoField) statusPagamentoField.addEventListener(eventName, updateRemainingPreview);
       if (workshopServicesList) workshopServicesList.addEventListener(eventName, updateRemainingPreview);
       if (externalPartsList) externalPartsList.addEventListener(eventName, updateRemainingPreview);
     });
