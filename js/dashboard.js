@@ -64,6 +64,13 @@
     }, 0);
   }
 
+  function firstAvailableText(values, fallback) {
+    const text = values.map(function (value) {
+      return String(value || '').trim();
+    }).find(Boolean);
+    return text || fallback;
+  }
+
   function parseDate(value) {
     if (!value) return null;
     const date = String(value).includes('T') ?new Date(value) : new Date(value + 'T00:00:00');
@@ -278,37 +285,114 @@
     }).join('');
   }
 
+  let activeOperationalQueue = 'budget';
+
+  function getOperationalQueues(data) {
+    return [
+      {
+        key: 'budget',
+        label: 'Em or&ccedil;amento',
+        actionLabel: 'Ver todos os servi&ccedil;os',
+        orders: data.ordersInBudget
+      },
+      {
+        key: 'approval',
+        label: 'Aguardando aprova&ccedil;&atilde;o',
+        actionLabel: 'Ver todos os servi&ccedil;os',
+        orders: data.ordersAwaitingApproval
+      },
+      {
+        key: 'progress',
+        label: 'Em andamento',
+        actionLabel: 'Ver todos os servi&ccedil;os',
+        orders: data.ordersInExecution
+      },
+      {
+        key: 'late',
+        label: 'Atrasadas',
+        actionLabel: 'Ver atrasadas',
+        orders: data.lateOrders
+      }
+    ];
+  }
+
+  function getQueueDateText(order) {
+    const date = order.previsaoEntrega || order.dataEntrada || order.criadoEm;
+    if (!date) return 'Sem previs&atilde;o';
+    const label = order.previsaoEntrega ?'Previs&atilde;o' : 'Data';
+    return `${label}: ${escapeHtml(formatDate(String(date).slice(0, 10)))}`;
+  }
+
+  function getQueueValueText(order) {
+    const remaining = getOrderRemaining(order);
+    const budgetValue = getOrderBudgetValue(order);
+    const totalValue = toNumber(order.valorTotal);
+    if (remaining > 0) return `Pendência: ${formatCurrency(remaining)}`;
+    if (budgetValue > 0) return formatCurrency(budgetValue);
+    if (totalValue > 0) return formatCurrency(totalValue);
+    return '';
+  }
+
+  function renderQueueOrder(order) {
+    const status = normalizeDashboardStatus(order.statusServico);
+    const customer = firstAvailableText([order.cliente], 'Cliente não informado');
+    const vehicleOrPart = firstAvailableText([order.carro, order.peca], 'Veículo não informado');
+    const service = firstAvailableText([getOrderServicesText(order)], 'Serviço não informado');
+    const valueText = getQueueValueText(order);
+    const statusText = status || 'recebido';
+
+    return `
+      <article class="queue-order">
+        <div class="queue-order-main">
+          <div>
+            <strong>OS ${escapeHtml(order.numeroOs || '----')}</strong>
+            <span>${escapeHtml(customer)}</span>
+          </div>
+          <span class="badge ${serviceBadgeClass(statusText)}">${escapeHtml(statusText)}</span>
+        </div>
+        <p>${escapeHtml(vehicleOrPart)}</p>
+        <p>${escapeHtml(service)}</p>
+        <div class="queue-order-meta">
+          <span>${getQueueDateText(order)}</span>
+          ${valueText ?`<span>${escapeHtml(valueText)}</span>` : ''}
+          <a href="servicos.html">Abrir OS</a>
+        </div>
+      </article>
+    `;
+  }
+
   function renderOperationalCards(data) {
     if (!overview) return;
-    const budgetValue = sumOrders(data.ordersInBudget, getOrderBudgetValue);
-    const approvalValue = sumOrders(data.ordersAwaitingApproval, getOrderBudgetValue);
-    const executionValue = sumOrders(data.ordersInProgress, function (order) { return toNumber(order.valorTotal); });
-    const lateValue = sumOrders(data.lateOrders, function (order) { return toNumber(order.valorTotal) || getOrderBudgetValue(order); });
-    const cards = [
-      ['Ordens em or&ccedil;amento', data.ordersInBudget.length, budgetValue, data.ordersInBudget, 'Ver servi&ccedil;os', 'info'],
-      ['Aguardando aprova&ccedil;&atilde;o', data.ordersAwaitingApproval.length, approvalValue, data.ordersAwaitingApproval, 'Revisar or&ccedil;amentos', 'warning'],
-      ['Servi&ccedil;os em andamento', data.ordersInProgress.length, executionValue, data.ordersInProgress, 'Acompanhar fila', 'success'],
-      ['OS atrasadas', data.lateOrders.length, lateValue, data.lateOrders, 'Priorizar atrasos', data.lateOrders.length ?'danger' : 'success']
-    ];
+    const queues = getOperationalQueues(data);
+    const selectedQueue = queues.find(function (queue) {
+      return queue.key === activeOperationalQueue;
+    }) || queues[0];
+    const orders = selectedQueue.orders;
+    const list = orders.length
+      ?orders.map(renderQueueOrder).join('')
+      : '<div class="queue-empty">Nenhuma OS nesta etapa.</div>';
 
-    overview.innerHTML = cards.map(function (card) {
-      const preview = card[3].slice(0, 3).map(function (order) {
-        return `OS ${escapeHtml(order.numeroOs)}`;
-      }).join(', ') || 'Nenhum registro';
-      return `
-        <article class="overview-card operational-card ${card[5]}">
-          <div>
-            <span>${card[0]}</span>
-            <strong>${card[1]}</strong>
-          </div>
-          <p>${escapeHtml(preview)}</p>
-          <div class="operational-card-footer">
-            <span>${card[2] > 0 ?formatCurrency(card[2]) : 'Sem valor calculado'}</span>
-            <a href="servicos.html">${card[4]}</a>
-          </div>
-        </article>
-      `;
-    }).join('');
+    overview.innerHTML = `
+      <div class="section-heading operational-queue-heading">
+        <div>
+          <p class="eyebrow">Opera&ccedil;&atilde;o</p>
+          <h2>Fila operacional</h2>
+        </div>
+        <a href="servicos.html">${selectedQueue.actionLabel}</a>
+      </div>
+      <div class="queue-tabs" role="tablist" aria-label="Fila operacional">
+        ${queues.map(function (queue) {
+          const active = queue.key === selectedQueue.key;
+          return `
+            <button class="queue-tab${active ?' is-active' : ''}" type="button" data-queue="${escapeHtml(queue.key)}" role="tab" aria-selected="${active ?'true' : 'false'}">
+              <span>${queue.label}</span>
+              <strong>${queue.orders.length}</strong>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div class="queue-list">${list}</div>
+    `;
   }
 
   function renderFinanceSummary(data) {
@@ -375,6 +459,15 @@
       if (!confirm('Remover apenas as OS de demonstraÃ§Ã£o? As OS reais serÃ£o mantidas.')) return;
       const removed = RetificaStorage.clearDemoOrders();
       alert(removed ?'Dados de demonstraÃ§Ã£o removidos.' : 'Nenhum dado de demonstraÃ§Ã£o encontrado.');
+      renderDashboard();
+    });
+  }
+
+  if (overview) {
+    overview.addEventListener('click', function (event) {
+      const tab = event.target.closest('[data-queue]');
+      if (!tab || !overview.contains(tab)) return;
+      activeOperationalQueue = tab.dataset.queue || 'budget';
       renderDashboard();
     });
   }
