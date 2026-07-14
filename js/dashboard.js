@@ -10,16 +10,35 @@
   const clearDemoButton = document.getElementById('clearDemoData');
 
   const STATUS = {
-    budget: 'orÃ§amento',
-    waitingApproval: 'aguardando aprovaÃ§Ã£o',
+    budget: 'orçamento',
+    waitingApproval: 'aguardando aprovação',
     approved: 'aprovado',
     rejected: 'recusado',
     received: 'recebido',
-    analysis: 'em anÃ¡lise',
-    execution: 'em execuÃ§Ã£o',
+    analysis: 'em análise',
+    execution: 'em execução',
     finished: 'finalizado',
     delivered: 'entregue'
   };
+
+  function normalizeDashboardStatus(status) {
+    const value = String(status || STATUS.received).trim().toLowerCase();
+    const aliases = {
+      'orÃ§amento': STATUS.budget,
+      'aguardando aprovaÃ§Ã£o': STATUS.waitingApproval,
+      'em anÃ¡lise': STATUS.analysis,
+      'em execuÃ§Ã£o': STATUS.execution
+    };
+    return aliases[value] || value;
+  }
+
+  function hasServiceStatus(order, status) {
+    return normalizeDashboardStatus(order && order.statusServico) === status;
+  }
+
+  function isDashboardWorkInProgress(order) {
+    return Boolean(order && [STATUS.received, STATUS.analysis, STATUS.approved, STATUS.execution].includes(normalizeDashboardStatus(order.statusServico)));
+  }
 
   function toNumber(value) {
     const number = Number(value || 0);
@@ -60,21 +79,29 @@
   }
 
   function getCompletionDate(order) {
-    if (![STATUS.finished, STATUS.delivered].includes(order.statusServico)) return null;
+    if (![STATUS.finished, STATUS.delivered].includes(normalizeDashboardStatus(order.statusServico))) return null;
     return parseDate(order.dataRetirada || order.dataPagamento || '');
   }
 
   function getDashboardMetrics(orders, totals) {
     const lateOrders = orders.filter(isOrderLate);
     const clientsWithPending = Object.values(getClientsWithPending(orders));
+    const ordersInBudget = orders.filter(function (order) { return hasServiceStatus(order, STATUS.budget); });
+    const ordersAwaitingApproval = orders.filter(function (order) { return hasServiceStatus(order, STATUS.waitingApproval); });
+    const ordersApproved = orders.filter(function (order) { return hasServiceStatus(order, STATUS.approved); });
+    const ordersInExecution = orders.filter(function (order) { return hasServiceStatus(order, STATUS.execution); });
+    const ordersFinished = orders.filter(function (order) { return hasServiceStatus(order, STATUS.finished); });
+    const ordersInProgress = orders.filter(isDashboardWorkInProgress);
     return {
       totals,
       lateOrders,
       clientsWithPending,
-      inProgress: orders.filter(isWorkInProgress),
-      budgetOrders: orders.filter(function (order) { return order.statusServico === STATUS.budget; }),
-      waitingApprovalOrders: orders.filter(function (order) { return order.statusServico === STATUS.waitingApproval; }),
-      executionOrders: orders.filter(function (order) { return isWorkInProgress(order); })
+      ordersInBudget,
+      ordersAwaitingApproval,
+      ordersApproved,
+      ordersInExecution,
+      ordersFinished,
+      ordersInProgress
     };
   }
 
@@ -82,11 +109,11 @@
     const totals = data.totals;
     const cards = [
       ['Total de ordens', totals.totalOrdens, 'default', 'OS'],
-      ['Em or&ccedil;amento', totals.orcamento, totals.orcamento > 0 ?'warning' : 'default', 'OR'],
-      ['Aguardando aprova&ccedil;&atilde;o', totals.aguardandoAprovacao, totals.aguardandoAprovacao > 0 ?'alert' : 'default', 'AP'],
-      ['Aprovadas', totals.aprovadas, 'success', 'OK'],
-      ['Em execu&ccedil;&atilde;o', totals.emExecucao, totals.emExecucao > 0 ?'warning' : 'default', 'EX'],
-      ['Finalizadas', totals.finalizadas, 'success', 'FN'],
+      ['Em or&ccedil;amento', data.ordersInBudget.length, data.ordersInBudget.length > 0 ?'warning' : 'default', 'OR'],
+      ['Aguardando aprova&ccedil;&atilde;o', data.ordersAwaitingApproval.length, data.ordersAwaitingApproval.length > 0 ?'alert' : 'default', 'AP'],
+      ['Aprovadas', data.ordersApproved.length, 'success', 'OK'],
+      ['Em execu&ccedil;&atilde;o', data.ordersInExecution.length, data.ordersInExecution.length > 0 ?'warning' : 'default', 'EX'],
+      ['Finalizadas', data.ordersFinished.length, 'success', 'FN'],
       ['OS atrasadas', data.lateOrders.length, data.lateOrders.length > 0 ?'alert' : 'success', '!'],
       ['Clientes com pend&ecirc;ncia', data.clientsWithPending.length, data.clientsWithPending.length > 0 ?'alert' : 'success', 'R$']
     ];
@@ -132,11 +159,11 @@
     if (!performanceChart || !performanceSummary) return;
     const monthly = getMonthlyPerformance(orders);
     const totalCompleted = orders.filter(function (order) {
-      return [STATUS.finished, STATUS.delivered].includes(order.statusServico);
+      return [STATUS.finished, STATUS.delivered].includes(normalizeDashboardStatus(order.statusServico));
     }).length;
     const completedWithDate = orders.filter(getCompletionDate).length;
     const activeOrders = orders.filter(function (order) {
-      return ![STATUS.rejected, STATUS.delivered].includes(order.statusServico);
+      return ![STATUS.rejected, STATUS.delivered].includes(normalizeDashboardStatus(order.statusServico));
     }).length;
     const totalOrders = orders.length;
     const completionRate = totalOrders ?Math.round((totalCompleted / totalOrders) * 100) : 0;
@@ -198,12 +225,13 @@
   }
 
   function activityLabel(order) {
+    const status = normalizeDashboardStatus(order.statusServico);
     if (isOrderLate(order)) return 'OS atrasada';
-    if (order.statusServico === STATUS.budget) return 'OS em or&ccedil;amento';
-    if (order.statusServico === STATUS.waitingApproval) return 'Aguardando aprova&ccedil;&atilde;o';
-    if (order.statusServico === STATUS.execution) return 'OS em execu&ccedil;&atilde;o';
-    if (order.statusServico === STATUS.finished) return 'OS finalizada';
-    if (order.statusServico === STATUS.delivered) return 'OS entregue';
+    if (status === STATUS.budget) return 'OS em or&ccedil;amento';
+    if (status === STATUS.waitingApproval) return 'Aguardando aprova&ccedil;&atilde;o';
+    if (status === STATUS.execution) return 'OS em execu&ccedil;&atilde;o';
+    if (status === STATUS.finished) return 'OS finalizada';
+    if (status === STATUS.delivered) return 'OS entregue';
     if (getOrderRemaining(order) > 0) return 'Pagamento pendente';
     return `OS ${escapeHtml(order.statusServico || 'recebida')}`;
   }
@@ -252,14 +280,14 @@
 
   function renderOperationalCards(data) {
     if (!overview) return;
-    const budgetValue = sumOrders(data.budgetOrders, getOrderBudgetValue);
-    const approvalValue = sumOrders(data.waitingApprovalOrders, getOrderBudgetValue);
-    const executionValue = sumOrders(data.executionOrders, function (order) { return toNumber(order.valorTotal); });
+    const budgetValue = sumOrders(data.ordersInBudget, getOrderBudgetValue);
+    const approvalValue = sumOrders(data.ordersAwaitingApproval, getOrderBudgetValue);
+    const executionValue = sumOrders(data.ordersInProgress, function (order) { return toNumber(order.valorTotal); });
     const lateValue = sumOrders(data.lateOrders, function (order) { return toNumber(order.valorTotal) || getOrderBudgetValue(order); });
     const cards = [
-      ['Ordens em or&ccedil;amento', data.budgetOrders.length, budgetValue, data.budgetOrders, 'Ver servi&ccedil;os', 'info'],
-      ['Aguardando aprova&ccedil;&atilde;o', data.waitingApprovalOrders.length, approvalValue, data.waitingApprovalOrders, 'Revisar or&ccedil;amentos', 'warning'],
-      ['Servi&ccedil;os em andamento', data.executionOrders.length, executionValue, data.executionOrders, 'Acompanhar fila', 'success'],
+      ['Ordens em or&ccedil;amento', data.ordersInBudget.length, budgetValue, data.ordersInBudget, 'Ver servi&ccedil;os', 'info'],
+      ['Aguardando aprova&ccedil;&atilde;o', data.ordersAwaitingApproval.length, approvalValue, data.ordersAwaitingApproval, 'Revisar or&ccedil;amentos', 'warning'],
+      ['Servi&ccedil;os em andamento', data.ordersInProgress.length, executionValue, data.ordersInProgress, 'Acompanhar fila', 'success'],
       ['OS atrasadas', data.lateOrders.length, lateValue, data.lateOrders, 'Priorizar atrasos', data.lateOrders.length ?'danger' : 'success']
     ];
 
