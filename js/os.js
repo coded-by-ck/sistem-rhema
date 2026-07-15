@@ -705,12 +705,13 @@
     const dataPagamento = statusPagamento === 'pago'
       ?(data.get('dataPagamento') || RetificaStorage.getTodayIso())
       : (data.get('dataPagamento') || '');
+    const dataEntrada = data.get('dataEntrada') || RetificaStorage.getTodayIso();
 
-    // Em edição, número e data original são preservados mesmo se o HTML for alterado no navegador.
+    // Em edição, o número original é preservado; a data de entrada segue o campo editável.
     return {
       id: existingOrder ?existingOrder.id : (window.crypto && crypto.randomUUID ?crypto.randomUUID() : String(Date.now())),
       numeroOs: existingOrder ?existingOrder.numeroOs : data.get('numeroOs'),
-      dataEntrada: existingOrder ?existingOrder.dataEntrada : data.get('dataEntrada'),
+      dataEntrada,
       cliente: String(data.get('cliente') || '').trim(),
       telefone: String(data.get('telefone') || '').trim(),
       marca,
@@ -818,7 +819,7 @@
 
   function fillForm(order) {
     form.numeroOs.value = order.numeroOs || '';
-    form.dataEntrada.value = order.dataEntrada || '';
+    form.dataEntrada.value = String(order.dataEntrada || '').slice(0, 10);
     form.cliente.value = order.cliente || '';
     form.telefone.value = order.telefone || '';
     if (form.marca) form.marca.value = order.marca || '';
@@ -880,7 +881,7 @@
       fillForm(existingOrder);
     } else {
       form.numeroOs.value = RetificaStorage.getNextOrderNumber();
-      form.dataEntrada.value = RetificaStorage.getTodayIso();
+      if (!form.dataEntrada.value) form.dataEntrada.value = RetificaStorage.getTodayIso();
       updateRemainingPreview();
     }
     setupFormCollapsibles(existingOrder);

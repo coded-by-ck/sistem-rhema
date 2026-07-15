@@ -93,7 +93,14 @@
   }
 
   function todayIso() {
-    return new Date().toISOString().slice(0, 10);
+    return formatLocalDateIso(new Date());
+  }
+
+  function formatLocalDateIso(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   function safeNumber(value) {
@@ -395,7 +402,7 @@
   function addDaysIso(days) {
     const date = new Date();
     date.setDate(date.getDate() + days);
-    return date.toISOString().slice(0, 10);
+    return formatLocalDateIso(date);
   }
 
   function calculateRemaining(order) {
