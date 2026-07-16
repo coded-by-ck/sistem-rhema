@@ -51,6 +51,7 @@
   let isAddingWorkshopService = false;
   let isAddingExternalPart = false;
   const selectedLabelOrderIds = new Set();
+  const newOrderClientPrefillKey = 'retificaOS.newOrderClientPrefill';
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
   function toNumber(value) {
@@ -864,6 +865,38 @@
     updateRemainingPreview();
   }
 
+  function startNewOrderForClient(order) {
+    const nomeCliente = String(order && order.cliente || '').trim();
+    const telefone = String(order && order.telefone || '').trim();
+    try {
+      if (nomeCliente || telefone) {
+        sessionStorage.setItem(newOrderClientPrefillKey, JSON.stringify({ nomeCliente, telefone }));
+      } else {
+        sessionStorage.removeItem(newOrderClientPrefillKey);
+      }
+    } catch (error) {
+      console.warn('Nao foi possivel preparar os dados do cliente para a nova OS.', error);
+    }
+    window.location.href = 'nova-os.html';
+  }
+
+  function applyNewOrderClientPrefill(isNewOrder) {
+    let prefill = null;
+    try {
+      const raw = sessionStorage.getItem(newOrderClientPrefillKey);
+      if (raw) prefill = JSON.parse(raw);
+      sessionStorage.removeItem(newOrderClientPrefillKey);
+    } catch (error) {
+      sessionStorage.removeItem(newOrderClientPrefillKey);
+      console.warn('Nao foi possivel ler os dados temporarios do cliente.', error);
+    }
+    if (!isNewOrder || !prefill || typeof prefill !== 'object') return;
+    const nomeCliente = String(prefill.nomeCliente || '').trim();
+    const telefone = String(prefill.telefone || '').trim();
+    if (form.cliente && !String(form.cliente.value || '').trim() && nomeCliente) form.cliente.value = nomeCliente;
+    if (form.telefone && !String(form.telefone.value || '').trim() && telefone) form.telefone.value = telefone;
+  }
+
   if (form) {
     const existingOrder = editId ?RetificaStorage.getOrderById(editId) : null;
     const formTitle = document.getElementById('formTitle');
@@ -879,9 +912,11 @@
       formTitle.textContent = 'Editar ordem de serviço';
       submitButton.textContent = 'Salvar alterações';
       fillForm(existingOrder);
+      applyNewOrderClientPrefill(false);
     } else {
       form.numeroOs.value = RetificaStorage.getNextOrderNumber();
       if (!form.dataEntrada.value) form.dataEntrada.value = RetificaStorage.getTodayIso();
+      applyNewOrderClientPrefill(true);
       updateRemainingPreview();
     }
     setupFormCollapsibles(existingOrder);
@@ -1583,7 +1618,10 @@
             <span class="badge ${serviceBadgeClass(order.statusServico)}">${escapeHtml(order.statusServico)}</span>
             <span class="badge ${paymentBadgeClass(order.statusPagamento)}">${escapeHtml(order.statusPagamento)}</span>
           </div>
+          <div class="order-card-footer-actions">
+            <button class="btn btn-secondary btn-new-client-order" type="button" data-action="new-client-order" data-id="${escapeHtml(orderId)}" aria-label="Criar nova OS para este cliente" title="Criar nova OS para este cliente">+</button>
             <button class="btn btn-secondary btn-details-toggle" type="button" data-action="toggle-details" data-order-id="${escapeHtml(orderId)}" aria-expanded="${expanded ?'true' : 'false'}">${expanded ?'Ocultar detalhes' : 'Ver detalhes'}</button>
+          </div>
         </div>
         ${detailsHtml}
       </article>
@@ -1671,6 +1709,15 @@
     });
 
     list.addEventListener('click', function (event) {
+      const newOrderButton = event.target.closest('[data-action="new-client-order"]');
+      if (newOrderButton && list.contains(newOrderButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const order = RetificaStorage.getOrderById(newOrderButton.dataset.id);
+        if (order) startNewOrderForClient(order);
+        return;
+      }
+
       const toggleButton = event.target.closest('[data-action="toggle-details"]');
       if (toggleButton && list.contains(toggleButton)) {
         event.preventDefault();
