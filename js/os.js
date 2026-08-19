@@ -908,6 +908,9 @@
       return;
     }
 
+    document.body.classList.add('has-order-action-dock');
+    document.body.classList.toggle('is-editing-order', Boolean(existingOrder));
+
     if (existingOrder) {
       formTitle.textContent = 'Editar ordem de serviço';
       submitButton.textContent = 'Salvar alterações';
@@ -1085,19 +1088,39 @@
       }
     });
 
+    let isSubmittingOrder = false;
+    const defaultSubmitButtonText = submitButton ?submitButton.textContent : '';
+
     form.addEventListener('submit', function (event) {
       event.preventDefault();
-      const order = collectOrderFromForm(existingOrder);
-
-      if (existingOrder) {
-        RetificaStorage.updateOrder(existingOrder.id, order);
-        setFlashMessage('OS atualizada com sucesso.');
-      } else {
-        RetificaStorage.saveOrder(order);
-        setFlashMessage('OS salva com sucesso.');
+      if (isSubmittingOrder) return;
+      isSubmittingOrder = true;
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = existingOrder ?'Salvando...' : 'Cadastrando...';
       }
 
-      window.location.href = 'servicos.html';
+      try {
+        const order = collectOrderFromForm(existingOrder);
+
+        if (existingOrder) {
+          RetificaStorage.updateOrder(existingOrder.id, order);
+          setFlashMessage('OS atualizada com sucesso.');
+        } else {
+          RetificaStorage.saveOrder(order);
+          setFlashMessage('OS salva com sucesso.');
+        }
+
+        window.location.href = 'servicos.html';
+      } catch (error) {
+        isSubmittingOrder = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = defaultSubmitButtonText;
+        }
+        console.error('Nao foi possivel salvar a OS.', error);
+        alert('Não foi possível salvar a OS. Confira os dados e tente novamente.');
+      }
     });
   }
 
@@ -1146,85 +1169,184 @@
       ?`<section class="observacoes-padrao"><h2>Observações padrão da empresa</h2><div class="notes observacoes-padrao-box">${escapeHtml(company.observacoesPadrao)}</div></section>`
       : '';
     const footerText = company.rodapeOs ?`<footer class="print-footer">${escapeHtml(company.rodapeOs)}</footer>` : '';
+    const workshopServicesItems = renderWorkshopServicesItems(order);
+    const externalPartsItems = renderExternalPartsItems(order);
+    const serviceBlocks = [
+      workshopServicesItems ?`<section class="print-block"><h2>Serviços da retífica</h2><div class="grid grid-4">${workshopServicesItems}</div></section>` : '',
+      externalPartsItems ?`<section class="print-block"><h2>Peças externas</h2><div class="grid grid-4">${externalPartsItems}</div></section>` : ''
+    ].filter(Boolean).join('');
+    const supportBlocks = [
+      budgetSection,
+      withdrawalSection,
+      optionalNotes('Observações da peça', order.observacoesPeca),
+      optionalNotes('Observações gerais', order.observacoesGerais),
+      defaultNotes,
+      footerText
+    ].filter(Boolean).join('');
+    const detailGridClass = serviceBlocks && supportBlocks
+      ?'print-detail-grid'
+      :'print-detail-grid print-detail-grid-single';
+    const renderPrintCopy = function (copyLabel) {
+      return `
+        <section class="print-copy">
+          <div class="print-copy-inner">
+            <header class="print-header">
+              ${companyLogo}
+              <div class="print-company">
+                <div class="print-title-row">
+                  <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
+                  <span class="print-copy-label">${escapeHtml(copyLabel)}</span>
+                </div>
+                <div class="print-company-info">
+                  ${companyInfo}
+                </div>
+              </div>
+              <div class="print-os-number">
+                <span>OS nº</span>
+                <strong>${escapeHtml(order.numeroOs)}</strong>
+              </div>
+            </header>
+
+            <section class="print-block">
+              <h2>Dados da OS</h2>
+              <div class="grid grid-4">
+                <div class="item"><strong>Cliente</strong>${escapeHtml(order.cliente || 'Não informado')}</div>
+                <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
+                <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
+                <div class="item"><strong>Ano</strong>${escapeHtml(order.ano || 'Não informado')}</div>
+                <div class="item item-wide"><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</div>
+                <div class="item"><strong>Status do serviço</strong>${escapeHtml(order.statusServico || 'Não informado')}</div>
+                <div class="item"><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</div>
+                <div class="item"><strong>Previsão de entrega</strong>${formatDate(order.previsaoEntrega)}</div>
+                <div class="item"><strong>Motor</strong>${escapeHtml(order.motor || 'Não informado')}</div>
+                <div class="item"><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</div>
+              </div>
+            </section>
+
+            <section class="print-block">
+              <h2>Valores</h2>
+              <div class="grid grid-4">
+                ${renderOrderValueItems(order)}
+                <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'Não informado')}</div>
+              </div>
+            </section>
+
+            ${serviceBlocks || supportBlocks ?`
+              <div class="${detailGridClass}">
+                ${serviceBlocks ?`<div class="print-detail-column">${serviceBlocks}</div>` : ''}
+                ${supportBlocks ?`<div class="print-detail-column">${supportBlocks}</div>` : ''}
+              </div>
+            ` : ''}
+            <section class="signatures">
+              <div class="signature">Assinatura do cliente</div>
+              <div class="signature">Assinatura da empresa</div>
+            </section>
+          </div>
+        </section>
+      `;
+    };
     const styles = [
-      'html, body { height: auto; min-height: 0; }',
-      'body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 12px; line-height: 1.3; margin: 0; }',
-      '.print-area, .print-page { width: 100%; max-width: 190mm; margin: 0 auto; padding: 0; page-break-after: avoid; break-after: avoid; }',
-      'header { align-items: center; border-bottom: 1px solid #111827; display: flex; gap: 12px; margin-bottom: 8px; padding-bottom: 7px; break-inside: avoid; page-break-inside: avoid; }',
-      'header p { margin: 2px 0; }',
-      'p { margin: 2px 0; }',
-      '.print-logo, .print-logo-fallback { width: 50px; height: 50px; border: 1px solid #d1d5db; object-fit: contain; }',
-      '.print-logo-fallback { display: grid; place-items: center; font-weight: 800; }',
-      'h1 { font-size: 20px; margin: 0 0 6px; }',
-      'h2, h3 { border-bottom: 1px solid #d1d5db; font-size: 14px; margin: 8px 0 5px; padding-bottom: 2px; }',
-      '.compact-section { break-inside: avoid; page-break-inside: avoid; }',
-      '.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }',
-      '.item { font-size: 12px; min-height: 0; }',
-      '.item strong { display: block; color: #4b5563; font-size: 9px; line-height: 1.15; text-transform: uppercase; }',
-      '.notes { border: 1px solid #d1d5db; min-height: auto; padding: 6px; white-space: pre-wrap; font-size: 11px; line-height: 1.25; }',
-      '.observacoes-padrao, .signatures, .print-signatures, .footer, .print-footer { break-inside: avoid; page-break-inside: avoid; }',
-      '.observacoes-padrao h2 { margin-top: 6px; }',
-      '.observacoes-padrao-box { min-height: auto; max-height: 48px; overflow: hidden; padding: 6px; margin-top: 4px; }',
-      '.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; }',
-      '.signature { border-top: 1px solid #111827; padding-top: 4px; text-align: center; font-size: 11px; }',
-      'footer { border-top: 1px solid #d1d5db; color: #4b5563; max-height: 34px; overflow: hidden; margin-top: 6px; padding-top: 4px; white-space: pre-wrap; font-size: 9px; line-height: 1.18; }',
-      '@page { size: A4 portrait; margin: 7mm; }',
-      '@media print { body { background: #fff !important; color: #000 !important; font-family: Arial, sans-serif; } .print-area, .print-page { width: 100%; max-width: 190mm; } }'
+      '@page { size: A4 portrait; margin: 8mm; }',
+      '* { box-sizing: border-box; }',
+      'html, body { height: auto; min-height: 0; margin: 0; }',
+      'body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 9.6px; line-height: 1.16; margin: 0; }',
+      'p { margin: 0; }',
+      '.print-area, .print-page, .print-sheet { width: 100%; max-width: none; margin: 0; padding: 0; page-break-after: avoid; break-after: avoid; }',
+      '.print-sheet { height: calc(297mm - 16mm); max-height: calc(297mm - 16mm); display: flex; flex-direction: column; overflow: hidden; }',
+      '.print-copy { border: 1px solid #9ca3af; flex: 1 1 0; min-height: 0; overflow: hidden; padding: 2.4mm 3mm 2.2mm; break-inside: avoid; page-break-inside: avoid; }',
+      '.print-copy-inner { display: flex; flex-direction: column; gap: 1.35mm; min-height: 0; }',
+      '.print-header { align-items: flex-start; border-bottom: 1px solid #111827; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2.4mm; padding-bottom: 1.7mm; break-inside: avoid; page-break-inside: avoid; }',
+      '.print-logo, .print-logo-fallback { width: 11mm; height: 11mm; border: 1px solid #d1d5db; object-fit: contain; }',
+      '.print-logo-fallback { display: grid; place-items: center; font-size: 12px; font-weight: 800; }',
+      '.print-title-row { align-items: flex-start; display: flex; gap: 2mm; justify-content: space-between; min-width: 0; }',
+      'h1 { font-size: 12.8px; line-height: 1.05; margin: 0 0 .7mm; }',
+      '.print-copy-label { border: 1px solid #d1d5db; color: #374151; flex: 0 0 auto; font-size: 8px; font-weight: 700; letter-spacing: 0; padding: .7mm 1.4mm; text-transform: uppercase; }',
+      '.print-company-info { color: #374151; display: flex; flex-wrap: wrap; gap: .4mm 2.2mm; font-size: 8px; line-height: 1.12; }',
+      '.print-company-info p { margin: 0; }',
+      '.print-os-number { border-left: 1px solid #d1d5db; min-width: 18mm; padding-left: 2mm; text-align: right; }',
+      '.print-os-number span { color: #4b5563; display: block; font-size: 8px; font-weight: 700; text-transform: uppercase; }',
+      '.print-os-number strong { display: block; font-size: 13.5px; line-height: 1.05; }',
+      '.print-block, .compact-section, .observacoes-padrao, .signatures, .print-signatures, .footer, .print-footer { break-inside: avoid; page-break-inside: avoid; }',
+      '.print-detail-grid { align-items: start; display: grid; gap: 2.6mm; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); min-width: 0; }',
+      '.print-detail-grid-single { grid-template-columns: 1fr; }',
+      '.print-detail-column { display: flex; flex-direction: column; gap: 1.35mm; min-width: 0; }',
+      'h2, h3 { border-bottom: 1px solid #d1d5db; font-size: 10.3px; line-height: 1.05; margin: 0 0 .9mm; padding-bottom: .5mm; }',
+      '.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1mm 2.6mm; }',
+      '.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
+      '.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }',
+      '.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }',
+      '.item { font-size: 9.4px; min-height: 0; overflow-wrap: anywhere; }',
+      '.item-wide { grid-column: span 2; }',
+      '.item strong { color: #4b5563; display: block; font-size: 7.4px; line-height: 1.1; text-transform: uppercase; }',
+      '.notes { border: 1px solid #d1d5db; font-size: 8.9px; line-height: 1.13; min-height: auto; overflow-wrap: anywhere; padding: 1.2mm; white-space: pre-wrap; }',
+      '.observacoes-padrao h2 { margin-top: 0; }',
+      '.observacoes-padrao-box { margin-top: 0; }',
+      '.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 3mm; }',
+      '.signature { border-top: 1px solid #111827; font-size: 8.7px; padding-top: 1mm; text-align: center; }',
+      'footer { border-top: 1px solid #d1d5db; color: #4b5563; font-size: 8px; line-height: 1.1; margin-top: 0; overflow-wrap: anywhere; padding-top: 1mm; white-space: pre-wrap; }',
+      '.cut-line { align-items: center; color: #6b7280; display: flex; flex: 0 0 5mm; font-size: 8px; gap: 2mm; letter-spacing: 0; text-transform: uppercase; }',
+      '.cut-line::before, .cut-line::after { border-top: 1px dashed #9ca3af; content: ""; flex: 1 1 auto; }',
+      '.print-condensed body, body .print-condensed { font-size: 9px; }',
+      '.print-condensed .print-copy { padding: 2mm 2.7mm; }',
+      '.print-condensed .print-copy-inner { gap: 1mm; }',
+      '.print-condensed .grid { gap: .8mm 2mm; }',
+      '.print-condensed .print-detail-grid { gap: 2mm; }',
+      '.print-condensed .print-detail-column { gap: 1mm; }',
+      '.print-condensed h1 { font-size: 12px; }',
+      '.print-condensed h2, .print-condensed h3 { font-size: 9.6px; margin-bottom: .7mm; }',
+      '.print-condensed .item { font-size: 8.9px; }',
+      '.print-condensed .notes { font-size: 8.4px; padding: 1mm; }',
+      '.print-condensed .signatures { margin-top: 2.2mm; }',
+      '.print-ultra-condensed .print-copy { padding: 1.2mm 2mm; }',
+      '.print-ultra-condensed .print-copy-inner { gap: .45mm; }',
+      '.print-ultra-condensed .print-header { gap: 1.6mm; padding-bottom: .9mm; }',
+      '.print-ultra-condensed .print-detail-grid { gap: 1.3mm; }',
+      '.print-ultra-condensed .print-detail-column { gap: .45mm; }',
+      '.print-ultra-condensed .print-logo, .print-ultra-condensed .print-logo-fallback { height: 9mm; width: 9mm; }',
+      '.print-ultra-condensed h1 { font-size: 11.2px; margin-bottom: .3mm; }',
+      '.print-ultra-condensed h2, .print-ultra-condensed h3 { font-size: 9.1px; margin-bottom: .3mm; padding-bottom: .25mm; }',
+      '.print-ultra-condensed .item { font-size: 8.8px; }',
+      '.print-ultra-condensed .item strong { font-size: 6.9px; }',
+      '.print-ultra-condensed .notes { font-size: 8.25px; padding: .7mm; }',
+      '.print-ultra-condensed footer, .print-ultra-condensed .signature { font-size: 8.1px; }',
+      '.print-single-copy-fallback { display: block; height: auto; max-height: none; min-height: calc(297mm - 16mm); overflow: visible; }',
+      '.print-single-copy-fallback .cut-line, .print-single-copy-fallback .print-copy:nth-of-type(2) { display: none; }',
+      '.print-single-copy-fallback .print-copy { min-height: calc(297mm - 16mm); overflow: visible; page-break-after: avoid; break-after: avoid; }',
+      '@media print { body { background: #fff !important; color: #000 !important; font-family: Arial, sans-serif; } .no-print, nav, .navbar, button { display: none !important; } .print-area, .print-page, .print-sheet { width: 100%; max-width: none; } }'
     ].join('');
 
     const html = `
-      <main class="print-area print-page">
-        <header>
-          ${companyLogo}
-          <div>
-            <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
-            ${companyInfo}
-            <p><strong>Ordem de Serviço nº</strong> ${escapeHtml(order.numeroOs)}</p>
-          </div>
-        </header>
-
-        <h2>Dados do cliente</h2>
-        <section class="grid">
-          <div class="item"><strong>Cliente</strong>${escapeHtml(order.cliente || 'Não informado')}</div>
-          <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
-        </section>
-
-        <h2>Dados do veículo e peça</h2>
-        <section class="grid">
-          <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
-          <div class="item"><strong>Ano</strong>${escapeHtml(order.ano || 'Não informado')}</div>
-          <div class="item"><strong>Motor</strong>${escapeHtml(order.motor || 'Não informado')}</div>
-          <div class="item"><strong>Peça recebida</strong>${escapeHtml(order.peca || 'Não informado')}</div>
-        </section>
-
-        <h2>Serviço solicitado</h2>
-        <section class="grid">
-          <div class="item"><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</div>
-          <div class="item"><strong>Status do serviço</strong>${escapeHtml(order.statusServico || 'Não informado')}</div>
-          <div class="item"><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</div>
-          <div class="item"><strong>Previsão de entrega</strong>${formatDate(order.previsaoEntrega)}</div>
-        </section>
-
-        <h2>Valores</h2>
-        <section class="grid">
-          ${renderOrderValueItems(order)}
-          <div class="item"><strong>Status do pagamento</strong>${escapeHtml(order.statusPagamento || 'Não informado')}</div>
-        </section>
-
-        ${renderWorkshopServicesItems(order) ?`<h2>Serviços da retífica</h2><section class="grid">${renderWorkshopServicesItems(order)}</section>` : ''}
-        ${renderExternalPartsItems(order) ?`<h2>Peças externas</h2><section class="grid">${renderExternalPartsItems(order)}</section>` : ''}
-        ${budgetSection}
-        ${withdrawalSection}
-        ${optionalNotes('Observações da peça', order.observacoesPeca)}
-        ${optionalNotes('Observações gerais', order.observacoesGerais)}
-
-        ${defaultNotes}
-        ${footerText}
-        <section class="signatures">
-          <div class="signature">Assinatura do cliente</div>
-          <div class="signature">Assinatura da empresa</div>
-        </section>
+      <main class="print-area print-page print-sheet os-print-sheet">
+        ${renderPrintCopy('1ª VIA — RETÍFICA')}
+        <div class="cut-line" aria-hidden="true"><span>Recorte aqui</span></div>
+        ${renderPrintCopy('2ª VIA — CLIENTE')}
       </main>
+      <script>
+        (function () {
+          function applyFitMode() {
+            var sheet = document.querySelector('.os-print-sheet');
+            if (!sheet) return;
+            sheet.classList.remove('print-condensed', 'print-ultra-condensed', 'print-single-copy-fallback');
+
+            function hasOverflow() {
+              var copies = Array.prototype.slice.call(sheet.querySelectorAll('.print-copy'));
+              return copies.some(function (copy) {
+                var inner = copy.querySelector('.print-copy-inner');
+                return copy.scrollHeight > copy.clientHeight + 1 || (inner && inner.scrollHeight > copy.clientHeight + 1);
+              }) || sheet.scrollHeight > sheet.clientHeight + 1;
+            }
+
+            if (hasOverflow()) sheet.classList.add('print-condensed');
+            if (hasOverflow()) sheet.classList.add('print-ultra-condensed');
+            if (hasOverflow()) sheet.classList.add('print-single-copy-fallback');
+          }
+
+          applyFitMode();
+          if (document.fonts && document.fonts.ready) document.fonts.ready.then(applyFitMode);
+          window.addEventListener('load', applyFitMode);
+          window.addEventListener('beforeprint', applyFitMode);
+        })();
+      <\/script>
     `;
 
     safePrint(html, {
