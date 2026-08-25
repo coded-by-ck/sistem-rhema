@@ -1998,12 +1998,30 @@ body.has-order-action-dock .order-action-dock .btn:focus-visible {
   margin-left: auto;
 }
 
+.client-summary-actions,
+.client-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.client-summary-actions .btn,
+.client-history-actions .btn {
+  margin-left: 0;
+}
+
 .client-summary-footer .client-pending-label {
   margin-top: 0;
 }
 
 .client-alert {
   margin-top: 0;
+}
+
+.client-history-actions {
+  max-width: 320px;
 }
 
 .client-alert.success {

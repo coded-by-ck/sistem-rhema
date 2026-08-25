@@ -52,6 +52,7 @@
   let isAddingExternalPart = false;
   const selectedLabelOrderIds = new Set();
   const newOrderClientPrefillKey = 'retificaOS.newOrderClientPrefill';
+  const clientBillingClosedStatuses = ['recusado'];
   const workshopLabelStatuses = ['orçamento', 'aguardando aprovação', 'aprovado', 'recebido', 'em análise', 'em execução', 'finalizado'];
 
   function toNumber(value) {
@@ -1965,6 +1966,202 @@
     });
   }
 
+  function isClientBillingOrder(order) {
+    if (!order || clientBillingClosedStatuses.includes(order.statusServico) || order.statusPagamento === 'sem cobrança') return false;
+    const remaining = getOrderRemaining(order);
+    return remaining > 0 || !['entregue', 'finalizado'].includes(order.statusServico);
+  }
+
+  function getClientBillingOrders(client) {
+    return (client && Array.isArray(client.ordens) ?client.ordens : []).filter(isClientBillingOrder).sort(function (a, b) {
+      return String(a.dataEntrada || '').localeCompare(String(b.dataEntrada || ''));
+    });
+  }
+
+  function getClientByKey(key) {
+    return buildClients().find(function (client) {
+      return client.key === key;
+    }) || null;
+  }
+
+  function getBillingOrderValue(order) {
+    const total = toNumber(order.valorTotal);
+    return total > 0 ?total : toNumber(order.valorOrcado);
+  }
+
+  function getClientBillingTotals(orders) {
+    return orders.reduce(function (totals, order) {
+      totals.total += getBillingOrderValue(order);
+      totals.received += getOrderReceived(order);
+      totals.remaining += getOrderRemaining(order);
+      return totals;
+    }, {
+      total: 0,
+      received: 0,
+      remaining: 0
+    });
+  }
+
+  function imprimirResumoClienteCobranca(client) {
+    const orders = getClientBillingOrders(client);
+    if (!orders.length) {
+      alert('Nenhuma OS aberta ou pendente encontrada para este cliente.');
+      return;
+    }
+
+    const company = getCompanySettings();
+    const companyLogo = company.logo
+      ?`<img class="billing-logo" src="${company.logo}" alt="Logo">`
+      :`<div class="billing-logo-fallback">${escapeHtml(company.sigla || 'RO')}</div>`;
+    const companyInfo = [company.telefone, company.endereco, company.cidadeUf, company.cnpj ?`CNPJ: ${company.cnpj}` : '', company.email]
+      .filter(Boolean)
+      .map(function (item) { return `<span>${escapeHtml(item)}</span>`; })
+      .join('');
+    const totals = getClientBillingTotals(orders);
+    const rows = orders.map(function (order) {
+      const remaining = getOrderRemaining(order);
+      const received = getOrderReceived(order);
+      const total = getBillingOrderValue(order);
+      const dueText = order.previsaoEntrega ?formatDate(order.previsaoEntrega) : 'Sem previsão';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(order.numeroOs || '----')}</strong><small>${formatDate(order.dataEntrada)}</small></td>
+          <td>${escapeHtml(order.carro || order.modelo || 'Não informado')}<small>${escapeHtml(order.peca || 'Peça não informada')}</small></td>
+          <td class="services-cell">${escapeHtml(getOrderServicesDetailedText(order))}</td>
+          <td>${escapeHtml(order.statusServico || 'Não informado')}<small>Previsão: ${escapeHtml(dueText)}</small></td>
+          <td class="money">${formatCurrency(total)}</td>
+          <td class="money">${formatCurrency(received)}</td>
+          <td class="money strong">${formatCurrency(remaining)}</td>
+        </tr>
+      `;
+    }).join('');
+    const styles = [
+      '@page { size: A4 portrait; margin: 8mm; }',
+      '* { box-sizing: border-box; }',
+      'body { margin: 0; background: #fff; color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 10.4px; line-height: 1.22; }',
+      '.client-billing-sheet { width: 100%; height: calc(297mm - 16mm); max-height: calc(297mm - 16mm); overflow: hidden; display: flex; flex-direction: column; gap: 3mm; }',
+      '.billing-header { align-items: flex-start; border-bottom: 2px solid #111827; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 3mm; padding-bottom: 3mm; }',
+      '.billing-logo, .billing-logo-fallback { border: 1px solid #d1d5db; height: 16mm; object-fit: contain; width: 16mm; }',
+      '.billing-logo-fallback { display: grid; place-items: center; font-size: 16px; font-weight: 900; }',
+      '.billing-company h1 { font-size: 18px; line-height: 1.05; margin: 0 0 1mm; }',
+      '.billing-company p { color: #374151; font-size: 10px; font-weight: 700; margin: 0 0 1.2mm; text-transform: uppercase; }',
+      '.billing-company-info { color: #4b5563; display: flex; flex-wrap: wrap; gap: .6mm 3mm; font-size: 9px; }',
+      '.billing-date { border-left: 1px solid #d1d5db; min-width: 30mm; padding-left: 3mm; text-align: right; }',
+      '.billing-date span { color: #6b7280; display: block; font-size: 8px; font-weight: 800; text-transform: uppercase; }',
+      '.billing-date strong { display: block; font-size: 12px; }',
+      '.billing-client { border: 1px solid #d1d5db; display: grid; gap: 1.2mm; grid-template-columns: 1.5fr 1fr 1fr; padding: 2.2mm; }',
+      '.billing-client span, .billing-total-card span { color: #6b7280; display: block; font-size: 8px; font-weight: 800; margin-bottom: .5mm; text-transform: uppercase; }',
+      '.billing-client strong, .billing-total-card strong { display: block; font-size: 12px; }',
+      '.billing-totals { display: grid; gap: 2mm; grid-template-columns: repeat(3, minmax(0, 1fr)); }',
+      '.billing-total-card { border: 1px solid #d1d5db; padding: 2mm; }',
+      '.billing-total-card.highlight { border-color: #111827; background: #f3f4f6; }',
+      'table { border-collapse: collapse; table-layout: fixed; width: 100%; }',
+      'th, td { border: 1px solid #d1d5db; padding: 1.8mm 1.5mm; text-align: left; vertical-align: top; }',
+      'th { background: #111827; color: #fff; font-size: 8px; text-transform: uppercase; }',
+      'td { font-size: 9.5px; overflow-wrap: anywhere; }',
+      'td small { color: #4b5563; display: block; font-size: 8px; margin-top: .7mm; }',
+      '.services-cell { font-size: 9px; }',
+      '.money { text-align: right; white-space: nowrap; }',
+      '.strong { font-weight: 900; }',
+      '.billing-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 18mm; margin-top: auto; padding-top: 6mm; }',
+      '.billing-signatures div { border-top: 1px solid #111827; font-size: 9px; padding-top: 1mm; text-align: center; }',
+      '.billing-condensed { gap: 2mm; font-size: 9.4px; }',
+      '.billing-condensed .billing-header { gap: 2mm; padding-bottom: 2mm; }',
+      '.billing-condensed .billing-logo, .billing-condensed .billing-logo-fallback { height: 12mm; width: 12mm; }',
+      '.billing-condensed .billing-company h1 { font-size: 15px; }',
+      '.billing-condensed .billing-client strong, .billing-condensed .billing-total-card strong { font-size: 10.5px; }',
+      '.billing-condensed th, .billing-condensed td { padding: 1.2mm; }',
+      '.billing-condensed td { font-size: 8.4px; }',
+      '.billing-condensed td small, .billing-condensed th { font-size: 7.2px; }',
+      '.billing-condensed .services-cell { font-size: 8px; }',
+      '.billing-condensed .billing-signatures { padding-top: 4mm; }',
+      '.billing-ultra-condensed { gap: 1.2mm; }',
+      '.billing-ultra-condensed .billing-company h1 { font-size: 13px; }',
+      '.billing-ultra-condensed .billing-company p, .billing-ultra-condensed .billing-company-info { font-size: 7.6px; }',
+      '.billing-ultra-condensed .billing-client, .billing-ultra-condensed .billing-totals { gap: 1mm; }',
+      '.billing-ultra-condensed th, .billing-ultra-condensed td { padding: .8mm; }',
+      '.billing-ultra-condensed td { font-size: 7.4px; line-height: 1.12; }',
+      '.billing-ultra-condensed td small, .billing-ultra-condensed th { font-size: 6.6px; }',
+      '.billing-ultra-condensed .services-cell { font-size: 7.1px; }',
+      '.billing-multipage { height: auto; max-height: none; overflow: visible; }',
+      '@media print { body { background: #fff !important; color: #111827 !important; } }'
+    ].join('');
+    const html = `
+      <main class="client-billing-sheet">
+        <header class="billing-header">
+          ${companyLogo}
+          <div class="billing-company">
+            <h1>${escapeHtml(company.nome || 'Retífica OS')}</h1>
+            <p>Resumo para cobrança</p>
+            <div class="billing-company-info">${companyInfo}</div>
+          </div>
+          <div class="billing-date">
+            <span>Emissão</span>
+            <strong>${formatDate(RetificaStorage.getTodayIso())}</strong>
+          </div>
+        </header>
+
+        <section class="billing-client">
+          <div><span>Cliente / empresa</span><strong>${escapeHtml(client.cliente || 'Cliente não informado')}</strong></div>
+          <div><span>Telefone</span><strong>${escapeHtml(client.telefone || 'Não informado')}</strong></div>
+          <div><span>OS na cobrança</span><strong>${orders.length}</strong></div>
+        </section>
+
+        <section class="billing-totals">
+          <div class="billing-total-card"><span>Total das OS</span><strong>${formatCurrency(totals.total)}</strong></div>
+          <div class="billing-total-card"><span>Recebido / entrada</span><strong>${formatCurrency(totals.received)}</strong></div>
+          <div class="billing-total-card highlight"><span>Saldo para cobrança</span><strong>${formatCurrency(totals.remaining)}</strong></div>
+        </section>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 11%;">OS</th>
+              <th style="width: 18%;">Veículo / peça</th>
+              <th style="width: 30%;">Serviços</th>
+              <th style="width: 15%;">Status</th>
+              <th style="width: 9%;">Total</th>
+              <th style="width: 8%;">Entrada</th>
+              <th style="width: 9%;">Restante</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+
+        <section class="billing-signatures">
+          <div>Assinatura da empresa contratante</div>
+          <div>Assinatura da retífica</div>
+        </section>
+      </main>
+      <script>
+        (function () {
+          function applyFitMode() {
+            var sheet = document.querySelector('.client-billing-sheet');
+            if (!sheet) return;
+            sheet.classList.remove('billing-condensed', 'billing-ultra-condensed', 'billing-multipage');
+            function hasOverflow() {
+              return sheet.scrollHeight > sheet.clientHeight + 1;
+            }
+            if (hasOverflow()) sheet.classList.add('billing-condensed');
+            if (hasOverflow()) sheet.classList.add('billing-ultra-condensed');
+            if (hasOverflow()) sheet.classList.add('billing-multipage');
+          }
+          applyFitMode();
+          if (document.fonts && document.fonts.ready) document.fonts.ready.then(applyFitMode);
+          window.addEventListener('load', applyFitMode);
+          window.addEventListener('beforeprint', applyFitMode);
+        })();
+      <\/script>
+    `;
+
+    safePrint(html, {
+      title: `Resumo cobrança - ${client.cliente || 'cliente'}`,
+      styles,
+      width: 1000,
+      height: 720
+    });
+  }
+
   function getAlsoKnownNames(client) {
     return client.nomes.filter(function (name) {
       return name.toLowerCase() !== String(client.cliente || '').toLowerCase();
@@ -2020,6 +2217,10 @@
     const pendingAlert = client.valorPendente > 0
       ?`<div class="client-alert">Valor pendente: <span class="money-value">${formatCurrency(client.valorPendente)}</span></div>`
       : '<div class="client-alert success">Cliente em dia</div>';
+    const billingOrders = getClientBillingOrders(client);
+    const billingAction = billingOrders.length
+      ?`<button class="btn btn-secondary" type="button" data-action="client-billing" data-client-key="${escapeHtml(client.key)}">Imprimir resumo para cobrança</button>`
+      : '';
 
     const ordersHtml = client.ordens.map(function (order) {
       const remaining = getOrderRemaining(order);
@@ -2133,7 +2334,10 @@
           <h3>${escapeHtml(client.cliente)}</h3>
           <p>${escapeHtml(client.telefone)}</p>
         </div>
-        ${pendingAlert}
+        <div class="client-history-actions">
+          ${pendingAlert}
+          ${billingAction}
+        </div>
       </div>
       ${ordersHtml}
     `;
@@ -2168,6 +2372,10 @@
       const alsoKnownHtml = alsoKnownNames.length
         ?`<p class="also-known">Também cadastrado como: ${escapeHtml(alsoKnownNames.join(', '))}</p>`
         : '';
+      const billingOrders = getClientBillingOrders(client);
+      const billingButton = billingOrders.length
+        ?`<button class="btn btn-secondary" type="button" data-client-billing-key="${escapeHtml(client.key)}">Imprimir cobrança</button>`
+        : '';
       return `
         <article class="client-summary ${pendingClass} ${activeClass}">
           <div>
@@ -2178,6 +2386,7 @@
           </div>
           <div class="client-summary-grid">
             <span><strong>Ordens</strong>${client.ordens.length}</span>
+            <span><strong>Para cobrança</strong>${billingOrders.length}</span>
             <span><strong>Total gasto</strong><span class="money-value">${formatCurrency(client.totalGasto)}</span></span>
             <span><strong>Pendente</strong><span class="money-value">${formatCurrency(client.valorPendente)}</span></span>
             <span><strong>Última OS</strong>${client.ultimaOs ?escapeHtml(client.ultimaOs.numeroOs) : 'Nenhuma'}</span>
@@ -2186,7 +2395,10 @@
           </div>
           <div class="client-summary-footer">
             <span class="client-pending-label ${client.valorPendente > 0 ?'' : 'success'}">${client.valorPendente > 0 ?'Cliente com pendência' : 'Cliente em dia'}</span>
-            <button class="btn btn-secondary" type="button" data-client-key="${escapeHtml(client.key)}">Ver histórico</button>
+            <div class="client-summary-actions">
+              ${billingButton}
+              <button class="btn btn-secondary" type="button" data-client-key="${escapeHtml(client.key)}">Ver histórico</button>
+            </div>
           </div>
         </article>
       `;
@@ -2197,6 +2409,12 @@
 
   if (clientsList) {
     clientsList.addEventListener('click', function (event) {
+      const billingButton = event.target.closest('[data-client-billing-key]');
+      if (billingButton) {
+        imprimirResumoClienteCobranca(getClientByKey(billingButton.dataset.clientBillingKey));
+        return;
+      }
+
       const button = event.target.closest('[data-client-key]');
       if (!button) return;
       selectedClientKey = button.dataset.clientKey;
@@ -2208,6 +2426,11 @@
     clientHistory.addEventListener('click', function (event) {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
+      if (button.dataset.action === 'client-billing') {
+        imprimirResumoClienteCobranca(getClientByKey(button.dataset.clientKey));
+        return;
+      }
+
       const order = RetificaStorage.getOrderById(button.dataset.id);
       if (!order) return;
       if (button.dataset.action === 'print') imprimirOS(order);
