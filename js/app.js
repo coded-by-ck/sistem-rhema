@@ -24,6 +24,7 @@
 
   applyCompanyBrand();
   consumeFlashMessage();
+  if (!publicPage) showCuteGreeting();
 })();
 
 function getCompanySettings() {
@@ -232,6 +233,85 @@ function consumeFlashMessage() {
   window.setTimeout(function () {
     showAppMessage(message);
   }, 120);
+}
+
+function getCuteGreetingPeriod(date) {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 12) return { key: 'morning', message: 'BOM DIA!!' };
+  if (hour >= 12 && hour < 18) return { key: 'afternoon', message: 'BOA TARDE!!' };
+  return { key: 'night', message: 'BOA NOITE!!' };
+}
+
+function addCuteGreetingHearts(container) {
+  const total = 30;
+  for (let index = 0; index < total; index += 1) {
+    const heart = document.createElement('span');
+    heart.className = index % 2 ?'is-blue' : 'is-red';
+    heart.textContent = '\u2665';
+    heart.style.setProperty('--x', `${Math.round(Math.random() * 360 - 180)}px`);
+    heart.style.setProperty('--rise', `${Math.round(Math.random() * 120 + 130)}px`);
+    heart.style.setProperty('--delay', `${(index * 0.045).toFixed(2)}s`);
+    heart.style.setProperty('--size', `${(Math.random() * 1 + 1.15).toFixed(2)}rem`);
+    container.appendChild(heart);
+  }
+}
+
+function showCuteGreeting() {
+  const now = new Date();
+  const period = getCuteGreetingPeriod(now);
+  if (!period) return;
+
+  const greeting = document.createElement('aside');
+  greeting.className = 'cute-greeting';
+  greeting.setAttribute('role', 'status');
+  greeting.setAttribute('aria-live', 'polite');
+
+  const hearts = document.createElement('div');
+  hearts.className = 'cute-greeting-hearts';
+  hearts.setAttribute('aria-hidden', 'true');
+  addCuteGreetingHearts(hearts);
+
+  const image = document.createElement('img');
+  image.className = 'cute-greeting-image';
+  image.src = 'img/mascote-boas-vindas.png';
+  image.alt = '';
+  image.addEventListener('error', function () {
+    if (image.dataset.fallbackLoaded) {
+      image.hidden = true;
+      return;
+    }
+    image.dataset.fallbackLoaded = 'true';
+    image.src = 'img/mascote-boas-vindas.svg';
+  });
+
+  const text = document.createElement('strong');
+  text.className = 'cute-greeting-text';
+  text.setAttribute('aria-label', period.message);
+  Array.from(period.message).forEach(function (character, index, letters) {
+    const letter = document.createElement('span');
+    letter.setAttribute('aria-hidden', 'true');
+    letter.textContent = character === ' ' ?'\u00a0' : character;
+    letter.style.setProperty('--i', index);
+    letter.style.setProperty('--mid', (letters.length - 1) / 2);
+    text.appendChild(letter);
+  });
+
+  greeting.appendChild(hearts);
+  greeting.appendChild(image);
+  greeting.appendChild(text);
+  document.body.appendChild(greeting);
+
+  window.requestAnimationFrame(function () {
+    greeting.classList.add('is-visible');
+  });
+
+  window.setTimeout(function () {
+    greeting.classList.add('is-leaving');
+  }, 3000);
+
+  window.setTimeout(function () {
+    greeting.remove();
+  }, 3400);
 }
 
 function safePrint(htmlContent, options) {
@@ -814,12 +894,27 @@ function imprimirFolhaEtiquetas(orders) {
 }
 
 function isOrderLate(order) {
-  if (!order.previsaoEntrega || ['entregue', 'finalizado', 'recusado'].includes(order.statusServico)) return false;
+  if (!order || !order.previsaoEntrega || ['entregue', 'finalizado', 'recusado'].includes(order.statusServico)) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dueDate = new Date(order.previsaoEntrega + 'T00:00:00');
   if (Number.isNaN(dueDate.getTime())) return false;
   return dueDate < today;
+}
+
+function getOrderLateDays(order) {
+  if (!isOrderLate(order)) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDate = new Date(order.previsaoEntrega + 'T00:00:00');
+  if (Number.isNaN(dueDate.getTime())) return 0;
+  return Math.max(Math.round((today.getTime() - dueDate.getTime()) / 86400000), 0);
+}
+
+function getOrderLateText(order) {
+  const days = getOrderLateDays(order);
+  if (!days) return '';
+  return days === 1 ?'Atrasada há 1 dia' : `Atrasada há ${days} dias`;
 }
 
 function calculateTotals(orders) {

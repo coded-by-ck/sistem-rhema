@@ -891,6 +891,14 @@ tbody tr:hover {
   background: rgba(37, 99, 235, 0.055);
 }
 
+tbody tr.is-late {
+  background: rgba(127, 29, 29, 0.12);
+}
+
+tbody tr.is-late:hover {
+  background: rgba(127, 29, 29, 0.18);
+}
+
 .recent-orders-section {
   overflow: visible;
 }
@@ -1592,6 +1600,144 @@ body.has-order-action-dock .order-action-dock .btn:focus-visible {
   transform: translateY(0);
 }
 
+.cute-greeting {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 135;
+  display: grid;
+  justify-items: center;
+  width: min(450px, calc(100vw - 36px));
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 24px)) scale(0.86);
+  transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.cute-greeting::before {
+  content: "";
+  position: absolute;
+  inset: 130px 22px 10px;
+  display: none;
+  border: 1px solid rgba(96, 165, 250, 0.32);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(9, 11, 14, 0.88));
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(239, 68, 68, 0.12);
+}
+
+.cute-greeting.is-visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.cute-greeting.is-leaving {
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 20px)) scale(0.92);
+}
+
+.cute-greeting-image {
+  position: relative;
+  z-index: 2;
+  width: 390px;
+  height: 390px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.36));
+  animation: cuteGreetingBounce 2.7s ease-in-out both;
+}
+
+.cute-greeting-text {
+  position: absolute;
+  left: 0;
+  top: -22px;
+  z-index: 5;
+  display: block;
+  width: 100%;
+  height: 150px;
+  color: #f8fafc;
+  font-size: 1.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.52), 0 0 12px rgba(96, 165, 250, 0.64);
+}
+
+.cute-greeting-text span {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  display: inline-block;
+  min-width: 0.75em;
+  text-align: center;
+  transform: translateX(-50%) rotate(calc((var(--i) - var(--mid)) * 7.4deg));
+  transform-origin: 50% 182px;
+}
+
+.cute-greeting-text span:nth-child(even) {
+  color: #bfdbfe;
+}
+
+.cute-greeting-text span:nth-child(odd) {
+  color: #fecaca;
+}
+
+.cute-greeting-hearts {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: visible;
+}
+
+.cute-greeting-hearts span {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  color: #ef4444;
+  font-size: var(--size);
+  line-height: 1;
+  opacity: 0;
+  transform: translate(-50%, 0) scale(0.7) rotate(-8deg);
+  animation: cuteHeartFloat 2.6s ease-out var(--delay) both;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 0 10px currentColor;
+}
+
+.cute-greeting-hearts span.is-blue {
+  color: #60a5fa;
+}
+
+@keyframes cuteGreetingBounce {
+  0% {
+    transform: translateY(12px) scale(0.9) rotate(-2deg);
+  }
+
+  34% {
+    transform: translateY(-6px) scale(1.04) rotate(2deg);
+  }
+
+  62% {
+    transform: translateY(2px) scale(0.99) rotate(-1deg);
+  }
+
+  100% {
+    transform: translateY(0) scale(1) rotate(0);
+  }
+}
+
+@keyframes cuteHeartFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.55) rotate(-10deg);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x)), calc(var(--rise) * -1)) scale(1.14) rotate(12deg);
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1998,6 +2144,40 @@ body.has-order-action-dock .order-action-dock .btn:focus-visible {
 .order-card.is-late {
   border-color: rgba(239, 68, 68, 0.68);
   box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.16), var(--shadow);
+}
+
+.order-late-alert {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 8px;
+  border: 1px solid rgba(239, 68, 68, 0.34);
+  border-radius: var(--radius);
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  padding: 8px 10px;
+}
+
+.order-late-alert strong {
+  color: #fee2e2;
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+.order-late-alert span {
+  color: #fca5a5;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.order-overdue-field {
+  border-color: rgba(239, 68, 68, 0.36) !important;
+  background: rgba(127, 29, 29, 0.16) !important;
+  color: #fecaca !important;
+}
+
+.order-overdue-text {
+  color: #fecaca !important;
+  font-weight: 850;
 }
 
 .order-card.waiting-approval {
@@ -2974,6 +3154,10 @@ textarea:focus {
 
   .sidebar {
     padding-block: 11px;
+  }
+
+  .brand-inline {
+    margin-right: 44px;
   }
 
   .brand-inline span {
@@ -4095,11 +4279,26 @@ textarea:focus {
   padding: 9px 10px;
 }
 
+.queue-order.is-late {
+  border-color: rgba(239, 68, 68, 0.42);
+  border-left-color: rgba(239, 68, 68, 0.9);
+  background:
+    linear-gradient(180deg, rgba(69, 10, 10, 0.34), rgba(9, 11, 14, 0.92)),
+    var(--card);
+}
+
 .queue-order-main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.queue-order-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
 }
 
 .queue-order-main strong {
@@ -4482,6 +4681,38 @@ textarea:focus {
 }
 
 @media (max-width: 620px) {
+  .cute-greeting {
+    left: 50%;
+    top: 50%;
+    bottom: auto;
+    width: min(330px, calc(100vw - 28px));
+    transform: translate(-50%, calc(-50% + 18px)) scale(0.9);
+  }
+
+  .cute-greeting.is-visible {
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .cute-greeting.is-leaving {
+    transform: translate(-50%, calc(-50% + 14px)) scale(0.94);
+  }
+
+  .cute-greeting-image {
+    width: 286px;
+    height: 286px;
+  }
+
+  .cute-greeting-text {
+    top: -14px;
+    height: 118px;
+    font-size: 1.34rem;
+  }
+
+  .cute-greeting-text span {
+    transform: translateX(-50%) rotate(calc((var(--i) - var(--mid)) * 7deg));
+    transform-origin: 50% 142px;
+  }
+
   .dashboard-page .app-main {
     width: calc(100% - 24px);
   }

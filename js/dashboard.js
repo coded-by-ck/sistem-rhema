@@ -335,6 +335,9 @@
 
   function renderQueueOrder(order) {
     const status = normalizeDashboardStatus(order.statusServico);
+    const late = isOrderLate(order);
+    const lateText = late ?getOrderLateText(order) : '';
+    const lateBadge = late ?`<span class="badge danger">${escapeHtml(lateText || 'Atrasada')}</span>` : '';
     const customer = firstAvailableText([order.cliente], 'Cliente não informado');
     const vehicleOrPart = firstAvailableText([order.carro, order.peca], 'Veículo não informado');
     const service = firstAvailableText([getOrderServicesText(order)], 'Serviço não informado');
@@ -342,18 +345,21 @@
     const statusText = status || 'recebido';
 
     return `
-      <article class="queue-order">
+      <article class="queue-order ${late ?'is-late' : ''}">
         <div class="queue-order-main">
           <div>
             <strong>OS ${escapeHtml(order.numeroOs || '----')}</strong>
             <span>${escapeHtml(customer)}</span>
           </div>
-          <span class="badge ${serviceBadgeClass(statusText)}">${escapeHtml(statusText)}</span>
+          <div class="queue-order-badges">
+            <span class="badge ${serviceBadgeClass(statusText)}">${escapeHtml(statusText)}</span>
+            ${lateBadge}
+          </div>
         </div>
         <p>${escapeHtml(vehicleOrPart)}</p>
         <p>${escapeHtml(service)}</p>
         <div class="queue-order-meta">
-          <span>${getQueueDateText(order)}</span>
+          <span class="${late ?'order-overdue-text' : ''}">${getQueueDateText(order)}</span>
           ${valueText ?`<span>${escapeHtml(valueText)}</span>` : ''}
           <a href="servicos.html">Abrir OS</a>
         </div>
@@ -418,11 +424,13 @@
 
   function renderRecentOrders(orders) {
     recent.innerHTML = orders.slice(0, 6).map(function (order) {
-      const lateBadge = isOrderLate(order) ?'<span class="badge danger">Atrasada</span>' : '';
+      const late = isOrderLate(order);
+      const lateText = late ?getOrderLateText(order) : '';
+      const lateBadge = late ?`<span class="badge danger">${escapeHtml(lateText || 'Atrasada')}</span>` : '';
       const demoBadge = order.isDemo ?'<span class="badge demo">Demo</span>' : '';
 
       return `
-        <tr>
+        <tr class="${late ?'is-late' : ''}">
           <td>${escapeHtml(order.numeroOs)}</td>
           <td>${escapeHtml(order.cliente || 'Cliente nao informado')} ${demoBadge}</td>
           <td>${escapeHtml(order.carro || 'Nao informado')}</td>

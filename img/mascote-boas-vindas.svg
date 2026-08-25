@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Mascote fofo de boas-vindas</title>
+  <desc id="desc">Mascote sorrindo com roupa azul para o aviso de boas-vindas.</desc>
+  <defs>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.28"/>
+    </filter>
+    <linearGradient id="hood" x1="142" x2="365" y1="42" y2="438" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9ed7ff"/>
+      <stop offset="0.58" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="205" x2="306" y1="217" y2="428" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#dff8ff"/>
+      <stop offset="1" stop-color="#a7f3d0"/>
+    </linearGradient>
+  </defs>
+  <g filter="url(#softShadow)">
+    <path d="M147 126c12-62 58-98 111-98 57 0 104 40 114 101 30 16 49 49 47 84-2 44-28 79-62 91 4 43-7 87-31 117-18 22-42 36-69 36-28 0-54-15-72-39-22-30-32-72-28-114-35-14-58-50-57-91 1-36 19-69 47-87Z" fill="#f8fafc"/>
+    <path d="M151 132c12-58 55-91 106-91 54 0 98 38 106 96 28 15 45 45 43 77-2 39-25 70-57 80 5 42-5 83-28 111-16 21-38 32-64 32-25 0-48-13-64-35-21-29-29-68-24-108-32-12-54-45-53-84 1-33 18-63 45-78Z" fill="url(#hood)"/>
+    <path d="M196 218c18 15 39 23 62 23 24 0 47-8 66-24 17 51 17 124 1 170-13 37-37 57-68 57-31 0-56-22-68-59-15-46-12-117 7-167Z" fill="url(#belly)"/>
+    <path d="M179 150c9-48 41-75 80-75 41 0 76 31 83 80 6 43-24 86-80 86-58 0-91-45-83-91Z" fill="#f5c7a9"/>
+    <path d="M186 143c11-43 43-66 79-63 42 4 70 36 72 75-20-4-38-14-52-30-20 21-52 33-99 18Z" fill="#111827"/>
+    <circle cx="226" cy="166" r="6" fill="#111827"/>
+    <circle cx="291" cy="166" r="6" fill="#111827"/>
+    <path d="M232 197c17 16 38 16 55 0" fill="none" stroke="#7f1d1d" stroke-linecap="round" stroke-width="8"/>
+    <path d="M199 100c-27 11-45 34-48 66" fill="none" stroke="#bfdbfe" stroke-linecap="round" stroke-width="13"/>
+    <path d="M330 101c23 12 38 35 41 66" fill="none" stroke="#bfdbfe" stroke-linecap="round" stroke-width="13"/>
+    <path d="M257 245v158" fill="none" stroke="#2563eb" stroke-linecap="round" stroke-width="7"/>
+    <path d="M257 272c-6-9-21-12-29-2-10 14 12 28 29 40 17-12 39-26 29-40-8-10-23-7-29 2Z" fill="#dc2626"/>
+    <path d="M161 297c-25 13-36 35-25 50 13 17 38 2 48-31" fill="#f5c7a9"/>
+    <path d="M350 298c26 12 37 34 26 49-13 18-38 2-49-31" fill="#f5c7a9"/>
+    <path d="M193 433c-26 8-42 23-34 37 8 15 38 11 62-12" fill="#f5c7a9"/>
+    <path d="M319 433c26 8 42 23 34 37-8 15-38 11-62-12" fill="#f5c7a9"/>
+  </g>
+</svg>
