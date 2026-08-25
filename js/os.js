@@ -1169,10 +1169,18 @@
       ?`<section class="observacoes-padrao"><h2>Observações padrão da empresa</h2><div class="notes observacoes-padrao-box">${escapeHtml(company.observacoesPadrao)}</div></section>`
       : '';
     const footerText = company.rodapeOs ?`<footer class="print-footer">${escapeHtml(company.rodapeOs)}</footer>` : '';
-    const workshopServicesItems = renderWorkshopServicesItems(order);
+    const renderPrintWorkshopServicesItems = function () {
+      const services = getOrderWorkshopServices(order);
+      if (!services.length) return '';
+      return services.map(function (service) {
+        const line = typeof formatWorkshopServiceLine === 'function' ?formatWorkshopServiceLine(service) : formatCurrency(service.subtotal || service.valor);
+        return `<div class="service-value-row"><div><strong>${escapeHtml(service.nome || 'Serviço não informado')}</strong>${service.observacao ?`<small>${escapeHtml(service.observacao)}</small>` : ''}</div><span>${escapeHtml(line)}</span></div>`;
+      }).join('');
+    };
+    const workshopServicesItems = renderPrintWorkshopServicesItems();
     const externalPartsItems = renderExternalPartsItems(order);
     const serviceBlocks = [
-      workshopServicesItems ?`<section class="print-block"><h2>Serviços da retífica</h2><div class="grid grid-4">${workshopServicesItems}</div></section>` : '',
+      workshopServicesItems ?`<section class="print-block"><h2>Serviços da retífica</h2><div class="service-value-list">${workshopServicesItems}</div></section>` : '',
       externalPartsItems ?`<section class="print-block"><h2>Peças externas</h2><div class="grid grid-4">${externalPartsItems}</div></section>` : ''
     ].filter(Boolean).join('');
     const supportBlocks = [
@@ -1214,7 +1222,7 @@
                 <div class="item"><strong>Telefone</strong>${escapeHtml(order.telefone || 'Não informado')}</div>
                 <div class="item"><strong>Veículo</strong>${escapeHtml(order.carro || 'Não informado')}</div>
                 <div class="item"><strong>Ano</strong>${escapeHtml(order.ano || 'Não informado')}</div>
-                <div class="item item-wide"><strong>Serviços</strong>${escapeHtml(getOrderServicesText(order))}</div>
+                <div class="item item-wide"><strong>Serviços e valores</strong>${escapeHtml(getOrderServicesDetailedText(order))}</div>
                 <div class="item"><strong>Status do serviço</strong>${escapeHtml(order.statusServico || 'Não informado')}</div>
                 <div class="item"><strong>Data de entrada</strong>${formatDate(order.dataEntrada)}</div>
                 <div class="item"><strong>Previsão de entrega</strong>${formatDate(order.previsaoEntrega)}</div>
@@ -1249,53 +1257,61 @@
       '@page { size: A4 portrait; margin: 8mm; }',
       '* { box-sizing: border-box; }',
       'html, body { height: auto; min-height: 0; margin: 0; }',
-      'body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 9.6px; line-height: 1.16; margin: 0; }',
+      'body { background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 10.2px; line-height: 1.17; margin: 0; }',
       'p { margin: 0; }',
       '.print-area, .print-page, .print-sheet { width: 100%; max-width: none; margin: 0; padding: 0; page-break-after: avoid; break-after: avoid; }',
-      '.print-sheet { height: calc(297mm - 16mm); max-height: calc(297mm - 16mm); display: flex; flex-direction: column; overflow: hidden; }',
-      '.print-copy { border: 1px solid #9ca3af; flex: 1 1 0; min-height: 0; overflow: hidden; padding: 2.4mm 3mm 2.2mm; break-inside: avoid; page-break-inside: avoid; }',
-      '.print-copy-inner { display: flex; flex-direction: column; gap: 1.35mm; min-height: 0; }',
+      '.print-sheet { height: auto; max-height: calc(297mm - 16mm); display: flex; flex-direction: column; overflow: hidden; }',
+      '.print-copy { border: 1px solid #9ca3af; flex: 0 0 auto; min-height: 0; overflow: hidden; padding: 2.1mm 3mm 1.8mm; break-inside: avoid; page-break-inside: avoid; }',
+      '.print-copy-inner { display: flex; flex-direction: column; gap: 1.2mm; min-height: 0; }',
       '.print-header { align-items: flex-start; border-bottom: 1px solid #111827; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2.4mm; padding-bottom: 1.7mm; break-inside: avoid; page-break-inside: avoid; }',
       '.print-logo, .print-logo-fallback { width: 11mm; height: 11mm; border: 1px solid #d1d5db; object-fit: contain; }',
       '.print-logo-fallback { display: grid; place-items: center; font-size: 12px; font-weight: 800; }',
       '.print-title-row { align-items: flex-start; display: flex; gap: 2mm; justify-content: space-between; min-width: 0; }',
-      'h1 { font-size: 12.8px; line-height: 1.05; margin: 0 0 .7mm; }',
-      '.print-copy-label { border: 1px solid #d1d5db; color: #374151; flex: 0 0 auto; font-size: 8px; font-weight: 700; letter-spacing: 0; padding: .7mm 1.4mm; text-transform: uppercase; }',
-      '.print-company-info { color: #374151; display: flex; flex-wrap: wrap; gap: .4mm 2.2mm; font-size: 8px; line-height: 1.12; }',
+      'h1 { font-size: 13.4px; line-height: 1.05; margin: 0 0 .7mm; }',
+      '.print-copy-label { border: 1px solid #d1d5db; color: #374151; flex: 0 0 auto; font-size: 8.4px; font-weight: 700; letter-spacing: 0; padding: .7mm 1.4mm; text-transform: uppercase; }',
+      '.print-company-info { color: #374151; display: flex; flex-wrap: wrap; gap: .4mm 2.2mm; font-size: 8.4px; line-height: 1.12; }',
       '.print-company-info p { margin: 0; }',
       '.print-os-number { border-left: 1px solid #d1d5db; min-width: 18mm; padding-left: 2mm; text-align: right; }',
-      '.print-os-number span { color: #4b5563; display: block; font-size: 8px; font-weight: 700; text-transform: uppercase; }',
-      '.print-os-number strong { display: block; font-size: 13.5px; line-height: 1.05; }',
+      '.print-os-number span { color: #4b5563; display: block; font-size: 8.4px; font-weight: 700; text-transform: uppercase; }',
+      '.print-os-number strong { display: block; font-size: 14px; line-height: 1.05; }',
       '.print-block, .compact-section, .observacoes-padrao, .signatures, .print-signatures, .footer, .print-footer { break-inside: avoid; page-break-inside: avoid; }',
       '.print-detail-grid { align-items: start; display: grid; gap: 2.6mm; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); min-width: 0; }',
       '.print-detail-grid-single { grid-template-columns: 1fr; }',
       '.print-detail-column { display: flex; flex-direction: column; gap: 1.35mm; min-width: 0; }',
-      'h2, h3 { border-bottom: 1px solid #d1d5db; font-size: 10.3px; line-height: 1.05; margin: 0 0 .9mm; padding-bottom: .5mm; }',
+      'h2, h3 { border-bottom: 1px solid #d1d5db; font-size: 10.8px; line-height: 1.05; margin: 0 0 .8mm; padding-bottom: .5mm; }',
       '.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1mm 2.6mm; }',
       '.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
       '.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }',
       '.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }',
-      '.item { font-size: 9.4px; min-height: 0; overflow-wrap: anywhere; }',
+      '.item { font-size: 10px; min-height: 0; overflow-wrap: anywhere; }',
       '.item-wide { grid-column: span 2; }',
-      '.item strong { color: #4b5563; display: block; font-size: 7.4px; line-height: 1.1; text-transform: uppercase; }',
-      '.notes { border: 1px solid #d1d5db; font-size: 8.9px; line-height: 1.13; min-height: auto; overflow-wrap: anywhere; padding: 1.2mm; white-space: pre-wrap; }',
+      '.item strong { color: #4b5563; display: block; font-size: 7.9px; line-height: 1.1; text-transform: uppercase; }',
+      '.service-value-list { display: grid; gap: .65mm; }',
+      '.service-value-row { align-items: start; border-bottom: 1px solid #e5e7eb; display: grid; font-size: 10px; gap: 2mm; grid-template-columns: minmax(0, 1fr) auto; line-height: 1.15; padding-bottom: .65mm; }',
+      '.service-value-row:last-child { border-bottom: 0; padding-bottom: 0; }',
+      '.service-value-row strong { color: #111827; display: block; font-size: 10px; line-height: 1.12; }',
+      '.service-value-row span { font-weight: 700; text-align: right; white-space: nowrap; }',
+      '.service-value-row small { color: #4b5563; display: block; font-size: 8.6px; line-height: 1.1; margin-top: .3mm; overflow-wrap: anywhere; }',
+      '.notes { border: 1px solid #d1d5db; font-size: 9.4px; line-height: 1.13; min-height: auto; overflow-wrap: anywhere; padding: 1.1mm; white-space: pre-wrap; }',
       '.observacoes-padrao h2 { margin-top: 0; }',
       '.observacoes-padrao-box { margin-top: 0; }',
       '.signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 3mm; }',
-      '.signature { border-top: 1px solid #111827; font-size: 8.7px; padding-top: 1mm; text-align: center; }',
-      'footer { border-top: 1px solid #d1d5db; color: #4b5563; font-size: 8px; line-height: 1.1; margin-top: 0; overflow-wrap: anywhere; padding-top: 1mm; white-space: pre-wrap; }',
+      '.signature { border-top: 1px solid #111827; font-size: 9.2px; padding-top: 1mm; text-align: center; }',
+      'footer { border-top: 1px solid #d1d5db; color: #4b5563; font-size: 8.6px; line-height: 1.1; margin-top: 0; overflow-wrap: anywhere; padding-top: 1mm; white-space: pre-wrap; }',
       '.cut-line { align-items: center; color: #6b7280; display: flex; flex: 0 0 5mm; font-size: 8px; gap: 2mm; letter-spacing: 0; text-transform: uppercase; }',
       '.cut-line::before, .cut-line::after { border-top: 1px dashed #9ca3af; content: ""; flex: 1 1 auto; }',
-      '.print-condensed body, body .print-condensed { font-size: 9px; }',
-      '.print-condensed .print-copy { padding: 2mm 2.7mm; }',
-      '.print-condensed .print-copy-inner { gap: 1mm; }',
+      '.print-condensed body, body .print-condensed { font-size: 9.4px; }',
+      '.print-condensed .print-copy { padding: 1.8mm 2.7mm; }',
+      '.print-condensed .print-copy-inner { gap: .9mm; }',
       '.print-condensed .grid { gap: .8mm 2mm; }',
       '.print-condensed .print-detail-grid { gap: 2mm; }',
       '.print-condensed .print-detail-column { gap: 1mm; }',
-      '.print-condensed h1 { font-size: 12px; }',
-      '.print-condensed h2, .print-condensed h3 { font-size: 9.6px; margin-bottom: .7mm; }',
-      '.print-condensed .item { font-size: 8.9px; }',
-      '.print-condensed .notes { font-size: 8.4px; padding: 1mm; }',
+      '.print-condensed h1 { font-size: 12.6px; }',
+      '.print-condensed h2, .print-condensed h3 { font-size: 10px; margin-bottom: .7mm; }',
+      '.print-condensed .item { font-size: 9.4px; }',
+      '.print-condensed .service-value-row { font-size: 9.4px; }',
+      '.print-condensed .service-value-row strong { font-size: 9.4px; }',
+      '.print-condensed .notes { font-size: 8.8px; padding: 1mm; }',
       '.print-condensed .signatures { margin-top: 2.2mm; }',
       '.print-ultra-condensed .print-copy { padding: 1.2mm 2mm; }',
       '.print-ultra-condensed .print-copy-inner { gap: .45mm; }',
@@ -1307,6 +1323,9 @@
       '.print-ultra-condensed h2, .print-ultra-condensed h3 { font-size: 9.1px; margin-bottom: .3mm; padding-bottom: .25mm; }',
       '.print-ultra-condensed .item { font-size: 8.8px; }',
       '.print-ultra-condensed .item strong { font-size: 6.9px; }',
+      '.print-ultra-condensed .service-value-row { font-size: 8.8px; gap: 1mm; padding-bottom: .35mm; }',
+      '.print-ultra-condensed .service-value-row strong { font-size: 8.8px; }',
+      '.print-ultra-condensed .service-value-row small { font-size: 7.6px; }',
       '.print-ultra-condensed .notes { font-size: 8.25px; padding: .7mm; }',
       '.print-ultra-condensed footer, .print-ultra-condensed .signature { font-size: 8.1px; }',
       '.print-single-copy-fallback { display: block; height: auto; max-height: none; min-height: calc(297mm - 16mm); overflow: visible; }',
