@@ -66,16 +66,59 @@
     return digits.startsWith('55') ?digits : `55${digits}`;
   }
 
+  function getWhatsAppOrderDetails(order) {
+    const parts = Array.isArray(order.pecasExternas) ?order.pecasExternas : [];
+    const services = getOrderWorkshopServices(order);
+    const hasDiscount = toNumber(order.valorDescontoServico) > 0;
+    const lines = ['🔧 SERVIÇOS DA RETÍFICA', ''];
+    services.forEach(function (service) {
+      lines.push(`• ${service.nome || 'Serviço não informado'} — ${formatWorkshopServiceLine(service)}`);
+    });
+    lines.push('', `Subtotal dos serviços: ${formatCurrency(getOrderServicesTotal(order))}`);
+    if (hasDiscount) {
+      lines.push(`Desconto nos serviços: ${formatCurrency(order.valorDescontoServico)}`);
+    }
+
+    if (parts.length) {
+      lines.push('', '🧩 PEÇAS EXTERNAS', '');
+      parts.forEach(function (part) {
+        const name = String(part.nome || '').trim() || 'Peça externa';
+        lines.push(`• ${name} — ${formatCurrency(part.valor)}`);
+      });
+      lines.push('', `Subtotal das peças: ${formatCurrency(order.subtotalPecasExternas)}`);
+    }
+
+    lines.push('', '💰 RESUMO', '');
+    if (hasDiscount) {
+      lines.push(`Serviços após desconto: ${formatCurrency(order.valorServicoComDesconto)}`);
+    }
+    if (parts.length) {
+      lines.push(`Peças externas: ${formatCurrency(order.subtotalPecasExternas)}`);
+    }
+    if (hasDiscount || parts.length) lines.push('');
+    lines.push(`Valor total: ${formatCurrency(order.valorTotal)}`);
+    if (toNumber(order.valorEntrada) > 0) {
+      lines.push(`Entrada: ${formatCurrency(order.valorEntrada)}`);
+    }
+    if (order.statusPagamento === 'pago') lines.push('Pagamento: quitado.');
+    lines.push(`Saldo restante: ${formatCurrency(getOrderRemaining(order))}`);
+    return lines.join('\n');
+  }
+
+  function getWhatsAppClientName(order) {
+    const name = String(order.cliente || '').trim() || 'cliente';
+    return name.charAt(0).toLocaleUpperCase('pt-BR') + name.slice(1);
+  }
+
   function createWhatsAppLink(order) {
     // WhatsApp: monta uma mensagem padrão com resumo da OS e valores atuais.
     const phone = getPhoneForWhatsApp(order.telefone);
     const companyName = getCompanySignature();
     const message = [
-      `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
+      `Olá, ${getWhatsAppClientName(order)}! Aqui é da ${companyName}.`,
       `Sua OS nº ${order.numeroOs} referente ao cabeçote/peça ${order.peca || 'não informada'} do veículo ${order.carro || 'não informado'} está com status: ${order.statusServico}.`,
-      `Valor total: ${formatCurrency(order.valorTotal)}.`,
-      `Valor pendente: ${formatCurrency(getOrderRemaining(order))}.`
-    ].join(' ');
+      getWhatsAppOrderDetails(order)
+    ].join('\n\n');
 
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   }
@@ -83,14 +126,12 @@
   function createBudgetWhatsAppLink(order) {
     const phone = getPhoneForWhatsApp(order.telefone);
     const companyName = getCompanySignature();
-    const budgetValue = toNumber(order.valorOrcado) || toNumber(order.valorTotal);
     const message = [
-      `Olá, ${order.cliente || 'cliente'}. Aqui é da ${companyName}.`,
+      `Olá, ${getWhatsAppClientName(order)}! Aqui é da ${companyName}.`,
       `Já avaliamos sua peça/cabeçote referente à OS nº ${order.numeroOs}.`,
-      `Serviços da retífica: ${getOrderServicesDetailedText(order)}.`,
-      `O orçamento ficou em ${formatCurrency(budgetValue)}.`,
+      getWhatsAppOrderDetails(order),
       'Podemos seguir com a execução do serviço?'
-    ].join(' ');
+    ].join('\n\n');
 
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   }
